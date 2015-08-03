@@ -34,10 +34,10 @@
 
 /**
  *  @file prgp_ardrone.h
- *  @brief The head file to program and test the ardrone.
- *  @details This is initially created and proposed by Chengqing Liu
- *  @version 0.9
- *  @author
+ *  @brief The head file for prgp_ardrone package.
+ *  @details The prgp_ardrone package and its structure and initial comments are created and tested by Chengqing Liu
+ *  @version 1.0
+ *  @author  , , , Chengqing Liu
  *  @date 24 July 2015
  *  @copyright BSD License.
  */
@@ -54,7 +54,6 @@
 #include "std_msgs/Duration.h"
 
 #include "ardrone_autonomy/Navdata.h"
-
 #include "tum_ardrone/filter_state.h"
 
 #include <unistd.h>
@@ -65,50 +64,94 @@
 #include <termios.h>
 #include <stdio.h>
 #include <algorithm>
+#include <pthread.h>
 
+#define CLASS_STYLE /**< Macro to open the class style code */
 
-#include <pthread.h> // for pthread_mutex_t
+#ifdef CLASS_STYLE
 
-typedef enum
+/** The main class for the prgp_ardrone package.
+ */
+class PrgpARDrone
 {
-  TAG_TYPE_NONE             = 0,
-  TAG_TYPE_SHELL_TAG        ,
-  TAG_TYPE_ROUNDEL          ,
-  TAG_TYPE_ORIENTED_ROUNDEL ,
-  TAG_TYPE_STRIPE           ,
-  TAG_TYPE_CAP              ,
-  TAG_TYPE_SHELL_TAG_V2     ,
-  TAG_TYPE_TOWER_SIDE       ,
-  TAG_TYPE_BLACK_ROUNDEL    ,
-  TAG_TYPE_NUM
-} TAG_TYPE;
+private:
+  ros::NodeHandle ndh_; /**< ROS node handle */
+  ros::Duration ndPause; /**< The duration to pause the node */
+  ros::Time pre_time; /**< The ROS time */
 
-#define TAG_TYPE_MASK(tagtype) (  ((tagtype)==0)? 0 : (1<<((tagtype)-1)) )
+  //Publishers
+  ros::Publisher landPub; /**< Publisher for sending the landing command directly to AR.Drone*/
+  ros::Publisher takeoffPub; /**< Publisher for sending the takeoff command directly to AR.Drone */
+  ros::Publisher drone_pub;	/**< Publisher for sending flight command to AR.Drone by /tum_ardrone/com */
+  ros::Publisher cmdPub; /**< Publisher for sending the command to Pi-Swarm by piswarm_com */
+  ros::Publisher velPub; /**< Publisher for sending the command directly to AR.Drone by cmd_vel */
 
+  //Subscribers
+  ros::Subscriber cmdSub; /**< Subscriber to get the command from Pi-Swarm by piswarm_com */
+  ros::Subscriber tagSub; /**< Subscriber to get the navdata, especially the tag result by /ardrone/navdata */
+  ros::Subscriber currentPosSub; /**< Subscriber to get the current position of the AR.Drone */
+  ros::Subscriber imgSub; /**< Subscriber to get the image from camera by /ardrone/image_raw */
 
-#define  ARDRONE_DETECTION_COLOR_ORANGE_GREEN  1   /*!< Cameras detect orange-green-orange tags */
-#define  ARDRONE_DETECTION_COLOR_ORANGE_YELLOW 2    /*!< Cameras detect orange-yellow-orange tags*/
-#define  ARDRONE_DETECTION_COLOR_ORANGE_BLUE 3      /*!< Cameras detect orange-blue-orange tags */
+  // services
+  ros::ServiceClient toggleCamSrv; /**< Service client to send empty service to toggle the camera */
+  ros::ServiceClient detecttypeSrv; /**< Service client to send empty service to change the detection configuration */
 
-/*
-ros::NodeHandle ndh_;
-ros::Duration ndPause;
+  //messages
+  std_msgs::String s; /**< Message for sending flight command to AR.Drone by /tum_ardrone/com*/
+  std::string c;
 
-//Publishers
-ros::Publisher landPub;			//send landing commands
-ros::Publisher takeoffPub;		//send takeoff commands
-ros::Publisher drone_pub;		//send commands to AR.Drone
-ros::Publisher cmdPub;			//To sen cnd to PiSwarm
-ros::Publisher velPub;			//send cmd directly to cmd_vel topic of the ardrone_autonomy
+  std_msgs::String s_Pi; /**< Message for sending command to Pi-Swarm by piswarm_com*/
+  std::string c_Pi;
 
-//Subscribers
-ros::Subscriber cmdSub;			//To get cnd from PiSwarm
-ros::Subscriber tagSub;			//To get Tag detection result
-ros::Subscriber currentPosSub;
-ros::Subscriber imgSub;
+  std_srvs::Empty toggle_srvs; /**< Service from client to server to toggle the camera */
+  std_srvs::Empty detect_srvs; /**< Service from client to server to change the detection configuration */
+  geometry_msgs::Twist velCmd; /**< Message for the cmd_vel topic to AR.Drone */
 
-ros::ServiceClient toggle_Cam_Srv;
-*/
+  static pthread_mutex_t send_CS;
+
+  //variables
+  double currentPos_x;
+  double currentPos_y;
+  bool start_flag; /**< The value will be true when AR.Drone get the recruiting command from Pi-Swarm */
+  bool detected_flag; /**< The value will be true when AR.Drone detect the target tag during the flight */
+  bool centering_flag; /**< The value will be true before AR.Drone centering the tag */
+  bool picture_flag; /**< The value will be true before taking the picture */
+  bool return_flag; /**< The value will be true before returning the Pi-Swarm back home */
+  bool init_tag_det; /**< The value will be true to activate the tag detection at the initial stage of AR.Drone */
+  bool init_detected_flag; /**< The value will be true when tag detected at the initial stage */
+  bool home_tag_det; /**< The value will be true to activate the tag detection at the home stage of AR.Drone */
+  bool home_detected_flag; /**< The value will be true when tag detected at home stage */
+  uint16_t current_tag; /**< change when setTargetTag() is used, 0 for black_roundel, 1 for COCARDE */
+  uint16_t tag_type; /**< 0 for black_roundel, 1 for COCARDE, 2 for mixed tag type (current_tag is 0) */
+
+public:
+  PrgpARDrone(void);
+  ~PrgpARDrone(void);
+
+  void run();
+
+  // callbacks
+  void piswarmCmdRev(const std_msgs::StringConstPtr str);
+  void takePic(const sensor_msgs::ImageConstPtr img);
+  void acquireTagResult(const ardrone_autonomy::Navdata &navdataReceived);
+  void acquireCurrentPos(const tum_ardrone::filter_state& currentPos);
+
+  //functions
+  void sendCmdToPiswarm();
+  void sendVelCmd();
+  void takeOff();
+  void land();
+  void sendFlightCnd();
+  void toggleCam();
+  void setTargetTag();
+  void initialARDrone();
+  void centeringTag();
+  void flightToSearchTag();
+  void flightToTarget();
+  void flightToHome();
+};
+
+#else //else for CLASS_STYLE
 
 std_msgs::String s;
 std::string c;
@@ -126,14 +169,8 @@ float currentPos_x;
 float currentPos_y;
 
 bool tag_detected = false;
-uint16_t flight_task_completed = 0;
-uint16_t current_cam = 0; //0 is horizonal, 1 is vertical
-uint16_t cnd_rev;
-uint16_t target_tag;
 
-#define COME_BACK 1
-#define START 1
-
+#endif//end of CLASS_STYLE
 
 
 #endif /* PRGP_ARDRONE_INCLUDE_PRGP_ARDRONE_H_ */
