@@ -33,9 +33,9 @@
 */
 
 /**
- *  @file prgp_ardrone.cpp
- *  @brief The source file for prgp_ardrone package.
- *  @details The prgp_ardrone package and its structure and initial comments are created and tested by Chengqing Liu.
+ *  @file PRGP_ardrone.cpp
+ *  @brief The source file for PRGP_ardrone package.
+ *  @details The PRGP_ardrone package and its structure and initial comments are created and tested by Chengqing Liu.
  *  @version 1.0
  *  @author  , , , Chengqing Liu
  *  @date 24 July 2015
@@ -45,12 +45,12 @@
 #include <prgp_ardrone/prgp_ardrone.h>
 
 #ifdef CLASS_STYLE
-pthread_mutex_t PrgpARDrone::send_CS = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t PRGPARDrone::send_CS = PTHREAD_MUTEX_INITIALIZER;
 
 /** Initialise the variables and paramaters.
  *  Initialise the ROS time, ROS Duration, Publishers, Subscribers, Service clients, Flags and so on.
  */
-PrgpARDrone::PrgpARDrone()
+PRGPARDrone::PRGPARDrone()
 {
   //variables in the class are initialized here.
 
@@ -66,10 +66,10 @@ PrgpARDrone::PrgpARDrone()
   velPub = ndh_.advertise<geometry_msgs::Twist>("cmd_vel",1);
 
   //Subscribers
-  cmdSub = ndh_.subscribe("piswarm_com", 1, &PrgpARDrone::piswarmCmdRev,this);
-  tagSub = ndh_.subscribe("/ardrone/navdata", 1, &PrgpARDrone::acquireTagResult,this);
-  currentPosSub = ndh_.subscribe("/ardrone/predictedPose", 1, &PrgpARDrone::acquireCurrentPos,this);
-  imgSub = ndh_.subscribe("/ardrone/image_raw",10, &PrgpARDrone::takePic,this);
+  cmdSub = ndh_.subscribe("piswarm_com", 1, &PRGPARDrone::piswarmCmdRev,this);
+  tagSub = ndh_.subscribe("/ardrone/navdata", 1, &PRGPARDrone::acquireTagResult,this);
+  currentPosSub = ndh_.subscribe("/ardrone/predictedPose", 1, &PRGPARDrone::acquireCurrentPos,this);
+  imgSub = ndh_.subscribe("/ardrone/image_raw",10, &PRGPARDrone::takePic,this);
 
   //Service client
   toggleCamSrv = ndh_.serviceClient<std_srvs::Empty>("/ardrone/togglecam",1);
@@ -86,17 +86,17 @@ PrgpARDrone::PrgpARDrone()
   tag_type = 0;
 }
 
-PrgpARDrone::~PrgpARDrone(void)
+PRGPARDrone::~PRGPARDrone(void)
 {
   //do not write anything here
 }
 
 /** Callback function for piswarm_com topic to get the command from the Pi-Swarm.
  *  Pi-Swarm send the recruiting command to the radio modem, the radio modem transfer the command to
- *  prgp_piswarmcom package. Then the prgp_piswarmcom package publish the command to the piswarm_com
+ *  PRGP_piswarmcom package. Then the PRGP_piswarmcom package publish the command to the piswarm_com
  *  topic. This function get the command from the piswarm_com topic.
  */
-void PrgpARDrone::piswarmCmdRev(const std_msgs::StringConstPtr str)
+void PRGPARDrone::piswarmCmdRev(const std_msgs::StringConstPtr str)
 {
 
   ROS_INFO_STREAM(*str);
@@ -127,19 +127,35 @@ void PrgpARDrone::piswarmCmdRev(const std_msgs::StringConstPtr str)
  *  When picture_flag become true, this function will start the taking picture function
  *  which get the image from the topic and process the image.
  */
-void PrgpARDrone::takePic(const sensor_msgs::ImageConstPtr img)
+void PRGPARDrone::takePic(const sensor_msgs::ImageConstPtr img)
 {
-
-  if(picture_flag == true)
+  std::fstream image;
+  CVD::Image<CVD::byte> new_image;
+static bool once = true;
+  if(once)      ///sy TODO change the flag
   {
+    once = false;
+    cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::MONO8);
+
+    if (new_image.size().x != img->width || new_image.size().y != img->height)
+      new_image.resize(CVD::ImageRef(img->width, img->height));
+    memcpy(new_image.data(), cv_ptr->image.data, img->width * img->height);      ///sy cpy the image to mimFrameBW.data()
+      //    newImageAvailable = true;
+
+    image.open("output.bmp",std::fstream::out);
+    std::cout << "****************** Printing Image ******************" << std::endl;
+    CVD::img_save(new_image, image,CVD::ImageType::BMP);
+    std::cout << "****************************************************" << std::endl;
+    image.close();
+//    image_saved = true;
 
 	//store;
 	//show;
 
-	centering_flag = false;
-    return_flag = true;
-    picture_flag = false;
-    toggleCam(); //change the camera back
+//	centering_flag = false;
+//    return_flag = true;
+//    picture_flag = false;
+//    toggleCam(); //change the camera back
   }
 }
 
@@ -147,7 +163,7 @@ void PrgpARDrone::takePic(const sensor_msgs::ImageConstPtr img)
  *  Getting the navdata from the topic and process the data. Then reporting the detection result
  *  for different stages, including the initial stage, flight stage and home stage of the AR.Drone.
  */
-void PrgpARDrone::acquireTagResult(const ardrone_autonomy::Navdata &navdataReceived)
+void PRGPARDrone::acquireTagResult(const ardrone_autonomy::Navdata &navdataReceived)
 {
   if(navdataReceived.tags_count > 0)
   {
@@ -191,17 +207,17 @@ void PrgpARDrone::acquireTagResult(const ardrone_autonomy::Navdata &navdataRecei
 /** Callback function for /ardrone/predictedPose to get the current position of AR.Drone.
  *  Getting the data from the topic and process it for different requirements.
  */
-void PrgpARDrone::acquireCurrentPos(const tum_ardrone::filter_state& currentPos)
+void PRGPARDrone::acquireCurrentPos(const tum_ardrone::filter_state& currentPos)
 {
   currentPos_x = currentPos.x;
   currentPos_y = currentPos.y;
 }
 
 /** Sending the command to the Pi-Swarm by the topic piswarm_com.
- *  The returning command is published to the topic. The prgp_piswarmcom package get the command
+ *  The returning command is published to the topic. The PRGP_piswarmcom package get the command
  *  and send to the radio modem. Then the radio modem will send the command to the Pi-Swarm.
  */
-void PrgpARDrone::sendCmdToPiswarm()
+void PRGPARDrone::sendCmdToPiswarm()
 {
   c_Pi = "b";
   s_Pi.data = c_Pi.c_str();
@@ -211,7 +227,7 @@ void PrgpARDrone::sendCmdToPiswarm()
 /** Sending the command directly to the ardrone_autonomy package by cmd_vel topic.
  *  Sending the command to control the yaw, gaz, pitch, roll and other paramaters.
  */
-void PrgpARDrone::sendVelCmd()
+void PRGPARDrone::sendVelCmd()
 {
 	velCmd.angular.z =0; // -cmd.yaw;
 	velCmd.linear.z = 0; //cmd.gaz;
@@ -223,7 +239,7 @@ void PrgpARDrone::sendVelCmd()
 
 /** Sending the takeoff command directly to the ardrone_autonomy package.
  */
-void PrgpARDrone::takeOff()
+void PRGPARDrone::takeOff()
 {
 	takeoffPub.publish(std_msgs::Empty());
 	ROS_INFO("Takeoff");
@@ -232,7 +248,7 @@ void PrgpARDrone::takeOff()
 
 /** Sending the landing command directly to the ardrone_autonomy package.
  */
-void PrgpARDrone::land()
+void PRGPARDrone::land()
 {
   landPub.publish(std_msgs::Empty());
   ROS_INFO("Land");
@@ -240,18 +256,30 @@ void PrgpARDrone::land()
 
 /** Sending the flight command to the tum_ardrone package by the topic /tum_ardrone/com.
  */
-void PrgpARDrone::sendFlightCnd()
+void PRGPARDrone::sendFlightCmd(std::string c)
 {
-	s.data = c.c_str();
-	pthread_mutex_lock(&send_CS);
-	drone_pub.publish(s);
-	pthread_mutex_unlock(&send_CS);
+  std_msgs::String s; /**< Message for sending flight command to AR.Drone by /tum_ardrone/com*/
+  s.data = c.c_str();
+  pthread_mutex_lock(&send_CS);
+  drone_pub.publish(s);
+  pthread_mutex_unlock(&send_CS);
 }
+
+/** Moving ARDrone to a certain pose.
+ *
+ */
+void PRGPARDrone::moveToPose(double x, double y, double z, double yaw = 0)
+{
+  std::string c;
+  sprintf(&c[0], "c goto %.2f %.2f %.2f %.2f", x, y, z, yaw);
+  sendFlightCmd(c);
+}
+
 /** Toggling the camera during the flight.
- *  The default camera is the front camera. When toggling happens, the camera will change to the
+ *  The default camera is the front camera. When toggleCam() happens, the camera will change to the
  *  vertical. And when toggling again, the camera will return to the front one.
  */
-void PrgpARDrone::toggleCam()
+void PRGPARDrone::toggleCam()
 {
   toggleCamSrv.call(toggle_srvs);
   ROS_INFO("toggle the camera");
@@ -261,7 +289,7 @@ void PrgpARDrone::toggleCam()
  *  The default detection type is the black_roundel. Running this function will change the detection
  *  to COCARDE. Running again will change the detection back to black_roundel.
  */
-void PrgpARDrone::setTargetTag()
+void PRGPARDrone::setTargetTag()
 {
   detecttypeSrv.call(detect_srvs);
   ROS_INFO("change the detect type");
@@ -271,25 +299,19 @@ void PrgpARDrone::setTargetTag()
 /** Initialise the ARDrone when it starts.
  *  Initialise the PTAM and set the reference point.
  */
-void PrgpARDrone::initialARDrone()
+bool PRGPARDrone::initARDrone()
 {
-  c = "c autoInit 500 800 4000 0.5";
-  sendFlightCnd();
+  sendFlightCmd("c autoInit 500 800 4000 0.5");
 
-  c = "c setMaxControl 0.1";
-  sendFlightCnd(); //set AR.Drone speed limit
+  sendFlightCmd("c setMaxControl 0.1"); //set AR.Drone speed limit
 
-  c = "c setInitialReachDist 0.2";
-  sendFlightCnd();
+  sendFlightCmd("c setInitialReachDist 0.2");
 
-  c = "c setStayWithinDist 0.3";
-  sendFlightCnd();
-
-  c = "c setStayTime 3";// stay 3 seconds
-  sendFlightCnd();
-
-  c = "c lockScaleFP";//PTAM
-  sendFlightCnd();
+  sendFlightCmd("c setStayWithinDist 0.3");
+ // stay 3 seconds
+  sendFlightCmd("c setStayTime 3");
+ //PTAM
+  sendFlightCmd("c lockScaleFP");
 
   ndPause.sleep();
 
@@ -306,12 +328,13 @@ void PrgpARDrone::initialARDrone()
 	 setTargetTag();//chang the tag back
   }
   init_tag_det = false;//open the tag detection for initial stage
+  return true;
 }
 
 /** Flight and searching the target tag.
  *  Sending the flight commands to control the flight.
  */
-void PrgpARDrone::flightToSearchTag()
+void PRGPARDrone::flightToSearchTag()
 {
   double x;
   double y;
@@ -321,17 +344,16 @@ void PrgpARDrone::flightToSearchTag()
   //record the home position
 
   //set a point, so the drone can first go out the gantry.
-  c = "c goto -0.25 -0.25 0.25 0";
-  sendFlightCnd();
+//  sendFlightCmd("c goto -0.25 -0.25 0.25 0");
 
   //record the gantry point position for return home
 
   //start searching with a search plan
-  c = " ";
-  sprintf(&c[0],"c goto %.2f %.2f %.2f %.2f", x,y,z,yaw);
-  sendFlightCnd();
+//  c = " ";
+//  sprintf(&c[0],"c goto %.2f %.2f %.2f %.2f", x,y,z,yaw);
+//  sendFlightCmd(c);
 
-  ndPause.sleep();
+//  ndPause.sleep();
   /* commmands can be used
 
 	 "c commandstring"
@@ -357,80 +379,78 @@ void PrgpARDrone::flightToSearchTag()
 /** Centering the target tag when the target tag is detected.
  *
  */
-void PrgpARDrone::centeringTag()
+void PRGPARDrone::centeringTag()
 {
   //after tag detected, move to the tag and let tag in the center of the video
 
-  centering_flag = true;
+//  centering_flag = true;
 }
 
 /** Fly to the target when the target tag is not detected.
  *  Firstly, initialise the AR.Drone and then send the commands to control the flight.
  */
-void PrgpARDrone::flightToTarget()
+void PRGPARDrone::flightToTarget()
 {
-  initialARDrone();
+//  initialARDrone();
 
-  if(detected_flag == false)
-  {
-	  flightToSearchTag();
-  }
+//  if(detected_flag == false)
+//  {
+//	  flightToSearchTag();
+//  }
 }
 
 /** Send commands to fly home.
  *
  */
-void PrgpARDrone::flightToHome()
+void PRGPARDrone::flightToHome()
 {
-  double x;
-  double y;
-  double z;
-  double yaw;
-
-  c = "c clearCommands";
-  sendFlightCnd();
-
-  //go to the record gantry point first to avoid the collision
-  c = "c goto -0.25 -0.25 0.25 0";
-  	sendFlightCnd();
-
-  //go to the record home position
-  c = "c goto -0.25 -0.25 0.25 0";
-  sendFlightCnd();
-
-  c = " ";
-  sprintf(&c[0],"c goto %.2f %.2f %.2f %.2f", x,y,z,yaw);
-  sendFlightCnd();
-
-  //if you need tag detection, do it here. you can change to the one you want
-  home_tag_det = true;//open the tag detection for home stage
-  if(0 == current_tag)
-  {
-  	  //do your work here.
-  }
-  else
-  {
-    setTargetTag();//change the tag
-  	//do your work here
-  }
-
-  //for emergency, use fuction land() to land the ardrone directly;
-  c = "c land";
-  sendFlightCnd();
-
+//  double x;
+//  double y;
+//  double z;
+//  double yaw;
+//
+//  sendFlightCmd("c clearCommands");
+//
+//  //go to the record gantry point first to avoid the collision
+//  sendFlightCmd("c goto -0.25 -0.25 0.25 0");
+//
+//  //go to the record home position
+//  sendFlightCmd("c goto -0.25 -0.25 0.25 0");
+//
+////  c = " ";
+////  sprintf(&c[0],"c goto %.2f %.2f %.2f %.2f", x,y,z,yaw);
+////  sendFlightCmd();
+//
+//  //if you need tag detection, do it here. you can change to the one you want
+//  home_tag_det = true;//open the tag detection for home stage
+//  if(0 == current_tag)
+//  {
+//  	  //do your work here.
+//  }
+//  else
+//  {
+//    setTargetTag();//change the tag
+//  	//do your work here
+//  }
+//
+//  //for emergency, use fuction land() to land the ardrone directly;
+//  sendFlightCmd("c land");
+//
 }
 
-/** The main running loop for the prgp_ardrone package.
+/** The main running loop for the PRGP_ardrone package.
  *  Getting the command from Pi-Swarm to start the AR.Drone. Then flight to the target. centering
  *  the target, taking the picture, returning home and send command to return the Pi-Swarm. All the
  *  functions are organised by the flags (true and false).
  */
-void PrgpARDrone::run()
+void PRGPARDrone::run()
 {
-  std::cout << "Starting running" << std::endl;
+//  std::cout << "Starting running" << std::endl;
   while(ros::ok())
   {
-	ROS_INFO("A new spin begins!");
+    while(1)
+      ros::spinOnce();  ///sy hold on here
+    ROS_INFO("A new spin begins!");
     ndPause.sleep();
 
     /*//for testing
@@ -461,17 +481,16 @@ void PrgpARDrone::run()
   }
 }
 
-/** main function of the prgp_ardrone package.
- *  create the ROS node, define the instance of the PrgpARDrone class. Calling the running loop.
+/** main function of the PRGP_ardrone package.
+ *  create the ROS node, define the instance of the PRGPARDrone class. Calling the running loop.
  */
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "prgp_ardrone");	//Create node
   ROS_INFO("Started prgp_ardrone Node. Hi from ARE 2014/15");
 
-  PrgpARDrone prgpARDrone;
-
-  prgpARDrone.run();
+  PRGPARDrone PRGPARDrone;
+  PRGPARDrone.run();
 
   return 0;
 }
@@ -519,7 +538,7 @@ void currentPos(const tum_ardrone::filter_state& currentPos)
  */
 int main(int argc, char **argv)
 {
-  ros::init(argc, argv, "prgp_ardrone");	//Create node
+  ros::init(argc, argv, "PRGP_ardrone");	//Create node
   ros::NodeHandle ndh_;
   ros::Duration ndPause;
 

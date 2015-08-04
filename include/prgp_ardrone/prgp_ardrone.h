@@ -33,9 +33,9 @@
 */
 
 /**
- *  @file prgp_ardrone.h
- *  @brief The head file for prgp_ardrone package.
- *  @details The prgp_ardrone package and its structure and initial comments are created and tested by Chengqing Liu
+ *  @file PRGP_ardrone.h
+ *  @brief The head file for PRGP_ardrone package.
+ *  @details The PRGP_ardrone package and its structure and initial comments are created and tested by Chengqing Liu
  *  @version 1.0
  *  @author  , , , Chengqing Liu
  *  @date 24 July 2015
@@ -56,6 +56,12 @@
 #include "ardrone_autonomy/Navdata.h"
 #include "tum_ardrone/filter_state.h"
 
+///sy   taking picture headers ########################
+#include "cvd/image_io.h"
+#include <cv_bridge/cv_bridge.h>
+#include <sensor_msgs/image_encodings.h>
+#include <iostream>
+
 #include <unistd.h>
 #include <sstream>
 #include <cmath>
@@ -70,9 +76,9 @@
 
 #ifdef CLASS_STYLE
 
-/** The main class for the prgp_ardrone package.
+/** The main class for the PRGP_ardrone package.
  */
-class PrgpARDrone
+class PRGPARDrone
 {
 private:
   ros::NodeHandle ndh_; /**< ROS node handle */
@@ -97,8 +103,8 @@ private:
   ros::ServiceClient detecttypeSrv; /**< Service client to send empty service to change the detection configuration */
 
   //messages
-  std_msgs::String s; /**< Message for sending flight command to AR.Drone by /tum_ardrone/com*/
-  std::string c;
+  //std_msgs::String s; /**< Message for sending flight command to AR.Drone by /tum_ardrone/com*/
+  //std::string c;
 
   std_msgs::String s_Pi; /**< Message for sending command to Pi-Swarm by piswarm_com*/
   std::string c_Pi;
@@ -125,8 +131,8 @@ private:
   uint16_t tag_type; /**< 0 for black_roundel, 1 for COCARDE, 2 for mixed tag type (current_tag is 0) */
 
 public:
-  PrgpARDrone(void);
-  ~PrgpARDrone(void);
+  PRGPARDrone(void);
+  ~PRGPARDrone(void);
 
   void run();
 
@@ -141,14 +147,15 @@ public:
   void sendVelCmd();
   void takeOff();
   void land();
-  void sendFlightCnd();
+  void sendFlightCmd(std::string c);
   void toggleCam();
   void setTargetTag();
-  void initialARDrone();
+  bool initARDrone();
   void centeringTag();
   void flightToSearchTag();
   void flightToTarget();
   void flightToHome();
+  void moveToPose(double x, double y, double z, double yaw);
 };
 
 #else //else for CLASS_STYLE
