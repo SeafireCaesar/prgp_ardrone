@@ -33,9 +33,9 @@
 */
 
 /**
- *  @file PRGP_ardrone.h
- *  @brief The head file for PRGP_ardrone package.
- *  @details The PRGP_ardrone package and its structure and initial comments are created and tested by Chengqing Liu
+ *  @file prgp_ardrone.h
+ *  @brief The head file for prgp_ardrone package.
+ *  @details The prgp_ardrone package and its structure and initial comments are created and tested by Chengqing Liu
  *  @version 1.0
  *  @author  , , , Chengqing Liu
  *  @date 24 July 2015
@@ -76,7 +76,7 @@
 
 #ifdef CLASS_STYLE
 
-/** The main class for the PRGP_ardrone package.
+/** The main class for the prgp_ardrone package.
  */
 class PRGPARDrone
 {
