@@ -9,6 +9,8 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
+  sensor_msgs
+  cv_bridge
 )
 
 ## System dependencies are found with CMake's conventions
@@ -101,6 +103,25 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
+# set header ans source files
+set(ARDRONE_SOURCE_FILES       
+  src/prgp_ardrone.cpp
+)
+set(ARDRONE_HEADER_FILES    
+  include/prgp_ardrone/prgp_ardrone.h
+)
+
+# set required libs and headers
+include_directories(
+  ${CMAKE_BINARY_DIR}/thirdparty/src/thirdparty/TooN/include 
+  ${CMAKE_BINARY_DIR}/thirdparty/src/thirdparty/libcvd/include  
+)  
+
+link_directories(
+  ${CMAKE_BINARY_DIR}/thirdparty/src/thirdparty/libcvd/lib 
+)
+set(CVD_LIBRARIES cvd)
+
 ## Declare a cpp library
 # add_library(prgp_ardrone
 #   src/${PROJECT_NAME}/prgp_ardrone.cpp
@@ -108,6 +129,7 @@ include_directories(
 
 ## Declare a cpp executable
 # add_executable(prgp_ardrone_node src/prgp_ardrone_node.cpp)
+add_executable(prgp_ardrone ${ARDRONE_SOURCE_FILES} ${ARDRONE_HEADER_FILES})
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
@@ -117,6 +139,10 @@ include_directories(
 # target_link_libraries(prgp_ardrone_node
 #   ${catkin_LIBRARIES}
 # )
+target_link_libraries(prgp_ardrone 
+  ${catkin_LIBRARIES}
+  ${CVD_LIBRARIES}
+)
 
 #############
 ## Install ##
@@ -165,5 +191,3 @@ include_directories(
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
-add_executable(prgp_ardrone src/prgp_ardrone.cpp)
-target_link_libraries(prgp_ardrone ${catkin_LIBRARIES})
