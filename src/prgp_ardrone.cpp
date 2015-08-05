@@ -74,6 +74,7 @@ PRGPARDrone::PRGPARDrone()
   //Service client
   toggleCamSrv = ndh_.serviceClient<std_srvs::Empty>("/ardrone/togglecam",1);
   detecttypeSrv = ndh_.serviceClient<std_srvs::Empty>("/ardrone/detecttype",1);
+  stopCmdAndHoverSrv = ndh_.serviceClient<std_srvs::Empty>("drone_autopilot/clearCommands",1);
 
   //Variables
   start_flag = false;
@@ -273,6 +274,12 @@ void PRGPARDrone::moveToPose(double x, double y, double z, double yaw = 0)
   std::string c;
   sprintf(&c[0], "c goto %.2f %.2f %.2f %.2f", x, y, z, yaw);
   sendFlightCmd(c);
+}
+
+void PRGPARDrone::stopCmdAndHover()
+{
+  stopCmdAndHoverSrv.call(stopCmd_srvs);
+  ROS_INFO("Command is cleared.");
 }
 
 /** Toggling the camera during the flight.
