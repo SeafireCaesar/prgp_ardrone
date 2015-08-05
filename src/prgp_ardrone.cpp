@@ -33,9 +33,9 @@
 */
 
 /**
- *  @file PRGP_ardrone.cpp
- *  @brief The source file for PRGP_ardrone package.
- *  @details The PRGP_ardrone package and its structure and initial comments are created and tested by Chengqing Liu.
+ *  @file prgp_ardrone.cpp
+ *  @brief The source file for prgp_ardrone package.
+ *  @details The prgp_ardrone package and its structure and initial comments are created and tested by Chengqing Liu.
  *  @version 1.0
  *  @author  , , , Chengqing Liu
  *  @date 24 July 2015
@@ -93,7 +93,7 @@ PRGPARDrone::~PRGPARDrone(void)
 
 /** Callback function for piswarm_com topic to get the command from the Pi-Swarm.
  *  Pi-Swarm send the recruiting command to the radio modem, the radio modem transfer the command to
- *  PRGP_piswarmcom package. Then the PRGP_piswarmcom package publish the command to the piswarm_com
+ *  prgp_piswarmcom package. Then the prgp_piswarmcom package publish the command to the piswarm_com
  *  topic. This function get the command from the piswarm_com topic.
  */
 void PRGPARDrone::piswarmCmdRev(const std_msgs::StringConstPtr str)
@@ -214,7 +214,7 @@ void PRGPARDrone::acquireCurrentPos(const tum_ardrone::filter_state& currentPos)
 }
 
 /** Sending the command to the Pi-Swarm by the topic piswarm_com.
- *  The returning command is published to the topic. The PRGP_piswarmcom package get the command
+ *  The returning command is published to the topic. The prgp_piswarmcom package get the command
  *  and send to the radio modem. Then the radio modem will send the command to the Pi-Swarm.
  */
 void PRGPARDrone::sendCmdToPiswarm()
@@ -276,7 +276,7 @@ void PRGPARDrone::moveToPose(double x, double y, double z, double yaw = 0)
 }
 
 /** Toggling the camera during the flight.
- *  The default camera is the front camera. When toggleCam() happens, the camera will change to the
+ *  The default camera is the front camera. When toggling happens, the camera will change to the
  *  vertical. And when toggling again, the camera will return to the front one.
  */
 void PRGPARDrone::toggleCam()
@@ -438,7 +438,7 @@ void PRGPARDrone::flightToHome()
 //
 }
 
-/** The main running loop for the PRGP_ardrone package.
+/** The main running loop for the prgp_ardrone package.
  *  Getting the command from Pi-Swarm to start the AR.Drone. Then flight to the target. centering
  *  the target, taking the picture, returning home and send command to return the Pi-Swarm. All the
  *  functions are organised by the flags (true and false).
@@ -481,7 +481,7 @@ void PRGPARDrone::run()
   }
 }
 
-/** main function of the PRGP_ardrone package.
+/** main function of the prgp_ardrone package.
  *  create the ROS node, define the instance of the PRGPARDrone class. Calling the running loop.
  */
 int main(int argc, char **argv)
@@ -538,7 +538,7 @@ void currentPos(const tum_ardrone::filter_state& currentPos)
  */
 int main(int argc, char **argv)
 {
-  ros::init(argc, argv, "PRGP_ardrone");	//Create node
+  ros::init(argc, argv, "prgp_ardrone");	//Create node
   ros::NodeHandle ndh_;
   ros::Duration ndPause;
 
