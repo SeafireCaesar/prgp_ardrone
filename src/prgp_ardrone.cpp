@@ -275,7 +275,14 @@ void PRGPARDrone::moveToPose(double x, double y, double z, double yaw = 0)
   sprintf(&c[0], "c goto %.2f %.2f %.2f %.2f", x, y, z, yaw);
   sendFlightCmd(c);
 }
-
+/** Stop the current flight comman and hover the ARDrone.
+ *  The function use a separate service defined in the tum_ardrone package to
+ *  clear the command queue (gaz, pitch, roll, yaw) in order to stop the current
+ *  flight command and stop the AR.Drone by delete the currentKI which is the instance
+ *  to master a command in tum_ardrone. This method with service is better than
+ *  simply sending "c clearCommands" to the /tum_ardrone/com topic as this topic is used
+ *  by a lot of nodes (several publishers and subscribers).
+ */
 void PRGPARDrone::stopCmdAndHover()
 {
   stopCmdAndHoverSrv.call(stopCmd_srvs);
