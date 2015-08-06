@@ -67,7 +67,7 @@ PRGPARDrone::PRGPARDrone()
 
   //Subscribers
 
-  cmdSub = ndh_.subscribe("piswarm_com", 1, &PRGPARDrone::piswarmCmdRev,this);
+  cmdSub = ndh_.subscribe("piswarm_com", 1, &PRGPARDrone::piswarmCmdRev, this);
   tagSub = ndh_.subscribe("/ardrone/navdata", 1, &PRGPARDrone::acquireTagResult, this);
   currentPosSub = ndh_.subscribe("/ardrone/predictedPose", 1, &PRGPARDrone::acquireCurrentPos, this);
   imgSub = ndh_.subscribe("/ardrone/image_raw", 10, &PRGPARDrone::takePic, this);
@@ -90,6 +90,7 @@ PRGPARDrone::PRGPARDrone()
   tag_type = 0;
   altitude = 0;
   reference_set = false;
+
 }
 
 PRGPARDrone::~PRGPARDrone(void)
@@ -275,6 +276,7 @@ void PRGPARDrone::sendFlightCmd(std::string c)
   drone_pub.publish(s);
   pthread_mutex_unlock(&send_CS);
   ROS_INFO("%s", c.c_str());
+  std::cout << "*******************" << s << std::endl;
 }
 
 /** Moving ARDrone to a certain pose.
@@ -282,8 +284,9 @@ void PRGPARDrone::sendFlightCmd(std::string c)
  */
 void PRGPARDrone::moveToPose(double x, double y, double z, double yaw = 0)
 {
-  std::string c;
-  sprintf(&c[0], "c goto %.2f %.2f %.2f %.2f", x, y, z, yaw);
+  char buff[100];
+  sprintf(buff, "c goto %.2f %.2f %.2f %.2f", x, y, z, yaw);
+  std::string c = buff;
   sendFlightCmd(c);
 }
 
@@ -292,8 +295,9 @@ void PRGPARDrone::moveToPose(double x, double y, double z, double yaw = 0)
  */
 void PRGPARDrone::moveBy(double x, double y, double z, double yaw = 0)
 {
-  std::string c;
-  sprintf(&c[0], "c moveBy %.2f %.2f %.2f %.2f", x, y, z, yaw);
+  char buff[100];
+  sprintf(buff, "c moveBy %.2f %.2f %.2f %.2f", x, y, z, yaw);
+  std::string c = buff;
   sendFlightCmd(c);
 }
 
@@ -338,31 +342,65 @@ bool PRGPARDrone::initARDrone()
   sendFlightCmd("c setInitialReachDist 0.1");
 
   sendFlightCmd("c setStayWithinDist 0.3");
-  // stay 3 seconds
-  sendFlightCmd("c setStayTime 0.2");
+  // stay 0.2 seconds
+  sendFlightCmd("c setStayTime 1");
   //PTAM
   sendFlightCmd("c lockScaleFP");
 
+  sendFlightCmd("c setReference $POSE$");
+
   ndPause.sleep();
-  //Fly up and down to improve PTAM
+  ndPause.sleep();
+  ndPause.sleep();
+  ndPause.sleep();
 
-  //centre above home tag
+  ros::spinOnce();
 
-  //if you need tag detection, do it here.
-  init_tag_det = true; //open the tag detection for initial stage
-  if (0 == current_tag)
+  ROS_INFO("Planned change in alt: %f. Current altd: %f", (DESIRED_HEIGHT - altitude), altitude);
+  moveBy(0.0, 0.0, (DESIRED_HEIGHT - altitude), 0.0);
+
+  sendFlightCmd("c setReference $POSE$");
+#define EXTRA_HEIGHT 0.6
+
+  moveToPose(0.0, 0.0, EXTRA_HEIGHT, 0);
+
+  ndPause.sleep();
+  ndPause.sleep();
+  ndPause.sleep();
+
+  ros::spinOnce();
+
+  double command_list[8][4] = { {0, 0.5, EXTRA_HEIGHT, 0}, {0, -0.5, EXTRA_HEIGHT, 0}, {0.5, 0.0, EXTRA_HEIGHT, 0}, {
+      -0.5, 0, EXTRA_HEIGHT, 0},
+                               {0.75, 0.75, EXTRA_HEIGHT, 0}, {0.75, -0.75, EXTRA_HEIGHT, 0}, {-0.75, -0.75,
+                                                                                               EXTRA_HEIGHT, 0},
+                               {-0.75, 0.75, EXTRA_HEIGHT, 0}};
+
+  int i = 0;
+  while (detected_flag == false && i < 8)
   {
-    //do your work here.
+    ROS_INFO("search for tag");
+    moveToPose(command_list[i][0], command_list[i][1], command_list[i][2], command_list[i][3]);
+    ndPause.sleep();
+    ndPause.sleep();
+    ndPause.sleep();
+    ros::spinOnce();
+    i++;
+  }
+
+  if (detected_flag == true)
+  {
+    centeringTag(DESIRED_HEIGHT + EXTRA_HEIGHT);
+    moveBy(0, 0, -EXTRA_HEIGHT, 0);
+    sendFlightCmd("c setReference $POSE$");
+    return true;
   }
   else
   {
-    setTargetTag(); //change the tag
-    //do your work here
-    setTargetTag(); //chang the tag back
+    ROS_INFO("Centering failed");
+    sendFlightCmd("c land");
+    return false;
   }
-
-  init_tag_det = false; //open the tag detection for initial stage
-  return true;
 }
 
 /** Flight and searching the target tag.
@@ -384,7 +422,7 @@ void PRGPARDrone::flightToSearchTag()
 
   //start searching with a search plan
 //  c = " ";
-//  sprintf(&c[0],"c goto %.2f %.2f %.2f %.2f", x,y,z,yaw);
+//  sprintf(&c[0],"c goto %.2f %.2f %.2f %.2f", x,y,z,yaw); ///sy wrong way for std::string
 //  sendFlightCmd(c);
 
 //  ndPause.sleep();
@@ -413,10 +451,61 @@ void PRGPARDrone::flightToSearchTag()
 /** Centering the target tag when the target tag is detected.
  *
  */
-void PRGPARDrone::centeringTag()
+bool PRGPARDrone::centeringTag(double current_height)
 {
   //after tag detected, move to the tag and let tag in the center of the video
 
+  //Update tag information
+  ros::spinOnce();
+  if (detected_flag == true)
+  {
+    while ((tag_x_coord < 450 || tag_x_coord > 550 || tag_y_coord < 450 || tag_y_coord > 550 || tag_orient > 185
+        || tag_orient < 175) && detected_flag == true)
+    {
+
+      //This conversion is for a height of 200cm only
+      float x_move = (float)tag_x_coord - 500;
+      x_move = x_move * current_height / 1070;
+      float y_move = (float)tag_y_coord - 500;
+      y_move = y_move * current_height / 1940 * -1;
+      float angle_to_turn = 0;
+
+      //TODO prevent to drone orienting when above piswarm tag
+      angle_to_turn = 180 - tag_orient;
+
+      //Error handling
+      if (x_move > 1 || y_move > 1 || x_move < -1 || y_move < -1 || angle_to_turn > 200 || angle_to_turn < -200)
+      {
+        ROS_WARN("Centring move command out of allowed range");
+        return false;
+      }
+      else
+      {
+        ROS_INFO("x coord is: %d, y coord is: %d",tag_x_coord,tag_y_coord);
+        ROS_INFO("Moving so Tag is at centre");
+        moveBy(x_move, y_move, 0.0, angle_to_turn);
+        ndPause.sleep();
+        ndPause.sleep();
+        ndPause.sleep();
+        ros::spinOnce();
+      }
+    }
+
+    if(detected_flag == true)
+    {
+      ROS_INFO("Drone centred above Tag");
+          return true;
+    }
+
+  }
+
+  else
+  {
+    ROS_INFO("Tag not detected so unable to centre");
+    return false;
+  }
+  return false;
+ //Check if the tag is detected
 //  centering_flag = true;
 }
 
@@ -425,18 +514,18 @@ void PRGPARDrone::centeringTag()
  */
 void PRGPARDrone::flightToTarget()
 {
-  if (initialising_PTAM_flag == true)
-  {
-    initARDrone();
-  }
-  else if (aligning_to_home_tag == true)
-  {
-    centeringTag();
-  }
-  else if (detected_flag == false)
-  {
-    flightToSearchTag();
-  }
+//if (initialising_PTAM_flag == true)
+//{
+//initARDrone();
+//}
+//else if (aligning_to_home_tag == true)
+//{
+//centeringTag();
+//}
+//else if (detected_flag == false)
+//{
+//flightToSearchTag();
+//}
 
 }
 
@@ -460,7 +549,7 @@ void PRGPARDrone::flightToHome()
 //  sendFlightCmd("c goto -0.25 -0.25 0.25 0");
 //
 ////  c = " ";
-////  sprintf(&c[0],"c goto %.2f %.2f %.2f %.2f", x,y,z,yaw);
+////  sprintf(&c[0],"c goto %.2f %.2f %.2f %.2f", x,y,z,yaw); ///sy wrong way for std::string
 ////  sendFlightCmd();
 //
 //  //if you need tag detection, do it here. you can change to the one you want
@@ -489,123 +578,14 @@ void PRGPARDrone::flightToHome()
 void PRGPARDrone::run()
 {
 
-  ROS_INFO("Starting running");
-}
-//  if (ros::ok())
-//  {
-//    //while(1)
-//    // ROS_DEBUG("aaaa");
-//    initARDrone();
-//
-//    ndPause.sleep();
-//    ndPause.sleep();
-//    ndPause.sleep();
-//    ndPause.sleep();
-//
-//    ros::spinOnce();
-//
-//    float desired_altitude = 0.8;
-//
-//    ROS_INFO("Planned change in alt: %f. Current altd: %f", (desired_altitude - altitude), altitude);
-//    moveBy(0.0,0.0,(desired_altitude - altitude), 0.0);
-//
-//    sendFlightCmd("c setReference $POSE$");
-//
-//    sendFlightCmd("c goto 0.0 0.0 1.2 0.0");
-//
-//    ndPause.sleep();
-//    ndPause.sleep();
-//    ndPause.sleep();
-//    ros::spinOnce();
-//
-//    std::string commandArray[8] = {"c goto 0.0 0.5 1.2 0.0", "c goto 0.0 -0.5 1.2 0.0", "c goto 0.5 0.0 1.2 0.0",
-//                                   "c goto -0.5 0.0 1.2 0.0", "c goto 0.75 0.75 1.2 0.0", "c goto 0.75 -0.75 1.2 0.0",
-//                                   "c goto -0.75 -0.75 1.2 0.0", "c goto -0.75 0.75 1.2 0.0"};
-//
-//    int i = 0;
-//    while (detected_flag == false && i < 8)
-//    {
-//      sendFlightCmd(commandArray[i]);
-//      ndPause.sleep();
-//      ndPause.sleep();
-//      ndPause.sleep();
-//      ndPause.sleep();
-//      ros::spinOnce();
-//      i++;
-//    }
-//
-//    if (detected_flag == true)
-//    {
-//      if (tag_x_coord < 450 || tag_x_coord > 550 || tag_y_coord < 450 || tag_y_coord > 550 || tag_orient > 185
-//          || tag_orient < 175)
-//      {
-//
-//        //This conversion is for a height of 200cm only
-//        float x_move = (float)tag_x_coord - 500;
-//        x_move = x_move * 0.00186;
-//        float y_move = (float)tag_y_coord - 500;
-//        y_move = y_move * -0.00103;
-//        float angle_to_turn = 0;
-//        angle_to_turn = 180 - tag_orient;
-//
-//        //Error handling
-//        if (x_move > 1 || y_move > 1 || x_move < -1 || y_move < -1 || angle_to_turn > 200 || angle_to_turn < -200)
-//        {
-//
-//        }
-//        else
-//        {
-//          moveBy(x_move,y_move,0.0,angle_to_turn);
-//          ROS_INFO("moveBy 0.0 0.0 -1.2 0.0");
-//          std::cout << "a£" << std::endl;
-//          std::cout << "£" << std::endl;
-//          sendFlightCmd("c moveBy 0.0 0.0 -1.2 0.0");
-//
-//          ndPause.sleep();
-//          ndPause.sleep();
-//          ndPause.sleep();
-//          ndPause.sleep();
-//          ndPause.sleep();
-//          ndPause.sleep();
-//
-//          ros::spinOnce();
-//          if (detected_flag == true)
-//          {
-//            if (tag_x_coord < 450 || tag_x_coord > 550 || tag_y_coord < 450 || tag_y_coord > 550 || tag_orient > 185
-//                || tag_orient < 175)
-//            {
-//              //This conversion is for a height of 80cm only
-//              x_move = (float)tag_x_coord - 500;
-//              x_move = x_move * 0.000748;
-//              y_move = (float)tag_y_coord - 500;
-//              y_move = y_move * -0.000412;
-//              angle_to_turn = 0;
-//              angle_to_turn = 180 - tag_orient;
-//
-//              //Error handling
-//              if (x_move > 1 || y_move > 1 || x_move < -1 || y_move < -1 || angle_to_turn > 200 || angle_to_turn < -200)
-//              {
-//
-//              }
-//              else
-//              {
-//                moveBy(x_move,y_move,0.0,angle_to_turn);
-//                ROS_INFO("Drone centred above Tag");
-//                sendFlightCmd("c setReference $POSE$");
-//                //lock the scale of the map
-//                sendFlightCmd("c lockScaleFP");
-//                reference_set = true;
-//                ndPause.sleep();
-//                ndPause.sleep();
-//                ndPause.sleep();
-//
-//              }
-//            }
-//          }
-//        }
-//      }
-//    }
-//
+ROS_INFO("Starting running");
+
+if (ros::ok())
+{
+//while(1)
+// ROS_DEBUG("aaaa");
+initARDrone();
+
 //    std::string commandArray2[22] = {"c goto 0.0 -0.75 0.0 0.0", //1
 //        "c goto 0.0 -1.5 0.0 0.0", //2
 //        "c goto -0.75 -1.5 0.0 0.0", //3
@@ -638,33 +618,38 @@ void PRGPARDrone::run()
 //      ros::spinOnce();
 //      i++;
 //    }
+ndPause.sleep();
+ndPause.sleep();
+ndPause.sleep();
+ndPause.sleep();
+ndPause.sleep();
+ndPause.sleep();
+sendFlightCmd("c land");
+ndPause.sleep();
+ndPause.sleep();
+ndPause.sleep();
+ndPause.sleep();
+ndPause.sleep();
+ndPause.sleep();
+//      std::cout << "**** executing_command_flag" << executing_command_flag << " after command sent" << std::endl;
+//      ros::spinOnce();
+//      std::cout << "**** executing_command_flag" << executing_command_flag << " after spinOnce" << std::endl;
+//      executing_command_flag = true;
+//      std::cout << "**** executing_command_flag" << executing_command_flag << " after reset" << std::endl;
+
+}
+
+//    while(executing_command_flag == true)
+//    {
+//      ROS_INFO("Initialising");
+//      ros::spinOnce();
+//    }
 //
-//    sendFlightCmd("c land");
-//    ndPause.sleep();
-//    ndPause.sleep();
-//    ndPause.sleep();
-//    ndPause.sleep();
-//    ndPause.sleep();
-//    ndPause.sleep();
-////      std::cout << "**** executing_command_flag" << executing_command_flag << " after command sent" << std::endl;
-////      ros::spinOnce();
-////      std::cout << "**** executing_command_flag" << executing_command_flag << " after spinOnce" << std::endl;
-////      executing_command_flag = true;
-////      std::cout << "**** executing_command_flag" << executing_command_flag << " after reset" << std::endl;
-//
-//  }
-//
-////    while(executing_command_flag == true)
-////    {
-////      ROS_INFO("Initialising");
-////      ros::spinOnce();
-////    }
-////
-////    ROS_INFO("Initcomplete");
-////    c = "c land";
-////    sendFlightCmd();
-////    ros::spinOnce();
-//}
+//    ROS_INFO("Initcomplete");
+//    c = "c land";
+//    sendFlightCmd();
+//    ros::spinOnce();
+}
 //  while(ros::ok())
 //  {
 //    ROS_INFO("A new spin begins!");
@@ -699,7 +684,6 @@ void PRGPARDrone::run()
 //     */
 //   ros::spinOnce();
 //  }
-
 
 /** main function of the prgp_ardrone package.
  *  create the ROS node, define the instance of the PRGPARDrone class. Calling the running loop.
@@ -737,8 +721,8 @@ void tagResult(const ardrone_autonomy::Navdata &navdataReceived)
 {
 if(navdataReceived.tags_count > 0)
 {
-  //Send confirmation to piswarm, use publish
-  tag_detected = true;
+//Send confirmation to piswarm, use publish
+tag_detected = true;
 }
 }
 int * a;
@@ -806,32 +790,32 @@ ndPause.sleep();//Wait for 2 seconds to prepare publishers & subscribers
 
 while(ros::ok())
 {
-  ROS_INFO("Hi from Liu");
-  ndPause.sleep();
-  /* if(i == 1)
-   {
-   ROS_INFO("change the detect type");
-   detecttypeSrv.call(detect_srvs);
-   i =0;
-   }*/
+ROS_INFO("Hi from Liu");
+ndPause.sleep();
+/* if(i == 1)
+ {
+ ROS_INFO("change the detect type");
+ detecttypeSrv.call(detect_srvs);
+ i =0;
+ }*/
 
-  /* if(i == 1)
-   {
-   ROS_INFO("toggle the camera");
-   toggleCamSrv.call(toggle_srvs);
-   i =0;
-   }*/
+/* if(i == 1)
+ {
+ ROS_INFO("toggle the camera");
+ toggleCamSrv.call(toggle_srvs);
+ i =0;
+ }*/
 
-  /*
-   c_Pi = " ";
-   c_Pi = "b";
-   s_Pi.data = c_Pi.c_str();
-   cmdPub.publish(s_Pi);
-   ndPause.sleep();
-   ndPause.sleep();
-   */
+/*
+ c_Pi = " ";
+ c_Pi = "b";
+ s_Pi.data = c_Pi.c_str();
+ cmdPub.publish(s_Pi);
+ ndPause.sleep();
+ ndPause.sleep();
+ */
 
-  ros::spinOnce();
+ros::spinOnce();
 }
 return 0;
 }

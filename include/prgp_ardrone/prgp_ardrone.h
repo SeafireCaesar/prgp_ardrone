@@ -76,6 +76,8 @@
 
 #ifdef CLASS_STYLE
 
+#define DESIRED_HEIGHT 0.8
+
 /** The main class for the prgp_ardrone package.
  */
 class PRGPARDrone
@@ -142,6 +144,17 @@ private:
   uint32_t tag_y_coord = 0;
   float tag_orient = 0;
 
+
+
+  typedef struct drone_pose
+  {
+    double x;
+    double y;
+    double z;
+    double yaw;
+  } pose_type;
+
+
 public:
   PRGPARDrone(void);
   ~PRGPARDrone(void);
@@ -164,7 +177,7 @@ public:
   void toggleCam();
   void setTargetTag();
   bool initARDrone();
-  void centeringTag();
+  bool centeringTag(double current_height);
   void flightToSearchTag();
   void flightToTarget();
   void flightToHome();
