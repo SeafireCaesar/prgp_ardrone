@@ -1,36 +1,36 @@
 /*
-* Software License Agreement (BSD License)
-*
-* Copyright (c) 2015, University of York Robotics Laboratory (YRL).
-* All rights reserved.
-*
-* Redistribution and use in source and binary forms, with or without
-* modification, are permitted provided that the following conditions
-* are met:
-*
-* * Redistributions of source code must retain the above copyright
-*   notice, this list of conditions and the following disclaimer.
-* * Redistributions in binary form must reproduce the above
-*   copyright notice, this list of conditions and the following
-*   disclaimer in the documentation and/or other materials provided
-*   with the distribution.
-* * Neither the name of the copyright holder nor the names of its
-*   contributors may be used to endorse or promote products derived
-*   from this software without specific prior written permission.
-*
-* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-* "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-* LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
-* FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-* COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-* INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-* BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-* LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-* LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-* ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-* POSSIBILITY OF SUCH DAMAGE.
-*/
+ * Software License Agreement (BSD License)
+ *
+ * Copyright (c) 2015, University of York Robotics Laboratory (YRL).
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * * Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ * * Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ * * Neither the name of the copyright holder nor the names of its
+ *   contributors may be used to endorse or promote products derived
+ *   from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /**
  *  @file prgp_ardrone.cpp
@@ -54,32 +54,32 @@ PRGPARDrone::PRGPARDrone()
 {
   //variables in the class are initialized here.
 
-  ndPause = ros::Duration(2,0);
-  pre_time= ros::Time::now();
+  ndPause = ros::Duration(2, 0);
+  pre_time = ros::Time::now();
 
   //if the topic cannot be resolved, try to change the topic below to "ndh_.resolveName("topic")"
   //Publishers
-  landPub = ndh_.advertise<std_msgs::Empty>("/ardrone/land",1);
-  takeoffPub = ndh_.advertise<std_msgs::Empty>("/ardrone/takeoff",1);
-  drone_pub = ndh_.advertise<std_msgs::String>("/tum_ardrone/com",50);
+  landPub = ndh_.advertise<std_msgs::Empty>("/ardrone/land", 1);
+  takeoffPub = ndh_.advertise<std_msgs::Empty>("/ardrone/takeoff", 1);
+  drone_pub = ndh_.advertise<std_msgs::String>("/tum_ardrone/com", 50);
   cmdPub = ndh_.advertise<std_msgs::String>("piswarm_com", 1);
-  velPub = ndh_.advertise<geometry_msgs::Twist>("cmd_vel",1);
+  velPub = ndh_.advertise<geometry_msgs::Twist>("cmd_vel", 1);
 
   //Subscribers
-  cmdSub = ndh_.subscribe("piswarm_com", 1, &PRGPARDrone::piswarmCmdRev,this);
-  tagSub = ndh_.subscribe("/ardrone/navdata", 1, &PRGPARDrone::acquireTagResult,this);
-  currentPosSub = ndh_.subscribe("/ardrone/predictedPose", 1, &PRGPARDrone::acquireCurrentPos,this);
-  imgSub = ndh_.subscribe("/ardrone/image_raw",10, &PRGPARDrone::takePic,this);
+  cmdSub = ndh_.subscribe("piswarm_com", 1, &PRGPARDrone::piswarmCmdRev, this);
+  tagSub = ndh_.subscribe("/ardrone/navdata", 1, &PRGPARDrone::acquireTagResult, this);
+  currentPosSub = ndh_.subscribe("/ardrone/predictedPose", 1, &PRGPARDrone::acquireCurrentPos, this);
+  imgSub = ndh_.subscribe("/ardrone/image_raw", 10, &PRGPARDrone::takePic, this);
 
   //Service client
-  toggleCamSrv = ndh_.serviceClient<std_srvs::Empty>("/ardrone/togglecam",1);
-  detecttypeSrv = ndh_.serviceClient<std_srvs::Empty>("/ardrone/detecttype",1);
+  toggleCamSrv = ndh_.serviceClient<std_srvs::Empty>("/ardrone/togglecam", 1);
+  detecttypeSrv = ndh_.serviceClient<std_srvs::Empty>("/ardrone/detecttype", 1);
 
   //Variables
   start_flag = false;
   detected_flag = false;
   centering_flag = false;
-  return_flag =false;
+  return_flag = false;
   init_tag_det = false;
   home_tag_det = false;
   current_tag = 0;
@@ -100,26 +100,26 @@ void PRGPARDrone::piswarmCmdRev(const std_msgs::StringConstPtr str)
 {
 
   ROS_INFO_STREAM(*str);
-  ROS_INFO("%s\n",str->data.c_str());
-  std::string k = str->data.substr(0,1);
-  ROS_INFO("%s\n",k.c_str());
-  if(str->data.c_str() == "r")
+  ROS_INFO("%s\n", str->data.c_str());
+  std::string k = str->data.substr(0, 1);
+  ROS_INFO("%s\n", k.c_str());
+  if (str->data.c_str() == "r")
   {
-	  //default is used the black_roundel tag
-	  start_flag = true;
-	  tag_type = 0;
+    //default is used the black_roundel tag
+    start_flag = true;
+    tag_type = 0;
   }
-  else if(str->data.c_str() == "c")
+  else if (str->data.c_str() == "c")
   {
-	  setTargetTag();//change to COCARDE tag
-	  start_flag = true;
-	  tag_type = 1;
+    setTargetTag(); //change to COCARDE tag
+    start_flag = true;
+    tag_type = 1;
   }
-  else if(str->data.c_str() == "m")
+  else if (str->data.c_str() == "m")
   {
-	  //mix tag, two black_roundel together, need not change the tag
-	  start_flag = true;
-	  tag_type = 2;
+    //mix tag, two black_roundel together, need not change the tag
+    start_flag = true;
+    tag_type = 2;
   }
 }
 
@@ -131,26 +131,26 @@ void PRGPARDrone::takePic(const sensor_msgs::ImageConstPtr img)
 {
   std::fstream image;
   CVD::Image<CVD::byte> new_image;
-static bool once = true;
-  if(once)      ///sy TODO change the flag
+  static bool once = true;
+  if (once) ///sy TODO change the flag
   {
     once = false;
     cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::MONO8);
 
     if (new_image.size().x != img->width || new_image.size().y != img->height)
       new_image.resize(CVD::ImageRef(img->width, img->height));
-    memcpy(new_image.data(), cv_ptr->image.data, img->width * img->height);      ///sy cpy the image to mimFrameBW.data()
-      //    newImageAvailable = true;
+    memcpy(new_image.data(), cv_ptr->image.data, img->width * img->height); ///sy cpy the image to mimFrameBW.data()
+    //    newImageAvailable = true;
 
-    image.open("output.bmp",std::fstream::out);
+    image.open("output.bmp", std::fstream::out);
     std::cout << "****************** Printing Image ******************" << std::endl;
-    CVD::img_save(new_image, image,CVD::ImageType::BMP);
+    CVD::img_save(new_image, image, CVD::ImageType::BMP);
     std::cout << "****************************************************" << std::endl;
     image.close();
 //    image_saved = true;
 
-	//store;
-	//show;
+    //store;
+    //show;
 
 //	centering_flag = false;
 //    return_flag = true;
@@ -165,7 +165,7 @@ static bool once = true;
  */
 void PRGPARDrone::acquireTagResult(const ardrone_autonomy::Navdata &navdataReceived)
 {
-  if(navdataReceived.tags_count > 0)
+  if (navdataReceived.tags_count > 0)
   {
     navdataReceived.tags_type[0];
     navdataReceived.tags_xc[0];
@@ -174,33 +174,34 @@ void PRGPARDrone::acquireTagResult(const ardrone_autonomy::Navdata &navdataRecei
     navdataReceived.tags_xc[1];
     navdataReceived.tags_yc[1];
 
-    if(init_tag_det == true)
+    if (init_tag_det == true)
     {
-      init_detected_flag = true ;
+      init_detected_flag = true;
     }
-    else if(home_tag_det == true)
+    else if (home_tag_det == true)
     {
-      home_detected_flag = true ;
+      home_detected_flag = true;
     }
-    else if(tag_type < 2)
+    else if (tag_type < 2)
     {
-    	detected_flag = true;
-    	start_flag = false;
+      detected_flag = true;
+      start_flag = false;
     }
-    else if(2 == tag_type)
+    else if (2 == tag_type)
     {
-      if((navdataReceived.tags_count == 2)&&(fabs(navdataReceived.tags_orientation[0]-navdataReceived.tags_orientation[0]) < 20))
+      if ((navdataReceived.tags_count == 2)
+          && (fabs(navdataReceived.tags_orientation[0] - navdataReceived.tags_orientation[0]) < 20))
       {
-    	  detected_flag = true;
-    	  start_flag = false;
+        detected_flag = true;
+        start_flag = false;
       }
     }
   }
   else
   {
-	  init_detected_flag = false;
-	  home_detected_flag = false;
-	  detected_flag = false;
+    init_detected_flag = false;
+    home_detected_flag = false;
+    detected_flag = false;
   }
 }
 
@@ -229,20 +230,20 @@ void PRGPARDrone::sendCmdToPiswarm()
  */
 void PRGPARDrone::sendVelCmd()
 {
-	velCmd.angular.z =0; // -cmd.yaw;
-	velCmd.linear.z = 0; //cmd.gaz;
-	velCmd.linear.x = 0; //-cmd.pitch;
-	velCmd.linear.y = 0; //-cmd.roll;
-	velCmd.angular.x = velCmd.angular.y = 0; //gui->useHovering ? 0 : 1;
-	velPub.publish(velCmd);
+  velCmd.angular.z = 0; // -cmd.yaw;
+  velCmd.linear.z = 0; //cmd.gaz;
+  velCmd.linear.x = 0; //-cmd.pitch;
+  velCmd.linear.y = 0; //-cmd.roll;
+  velCmd.angular.x = velCmd.angular.y = 0; //gui->useHovering ? 0 : 1;
+  velPub.publish(velCmd);
 }
 
 /** Sending the takeoff command directly to the ardrone_autonomy package.
  */
 void PRGPARDrone::takeOff()
 {
-	takeoffPub.publish(std_msgs::Empty());
-	ROS_INFO("Takeoff");
+  takeoffPub.publish(std_msgs::Empty());
+  ROS_INFO("Takeoff");
 
 }
 
@@ -293,7 +294,7 @@ void PRGPARDrone::setTargetTag()
 {
   detecttypeSrv.call(detect_srvs);
   ROS_INFO("change the detect type");
-  current_tag = (current_tag+1) % 2;
+  current_tag = (current_tag + 1) % 2;
 }
 
 /** Initialise the ARDrone when it starts.
@@ -308,26 +309,26 @@ bool PRGPARDrone::initARDrone()
   sendFlightCmd("c setInitialReachDist 0.2");
 
   sendFlightCmd("c setStayWithinDist 0.3");
- // stay 3 seconds
+  // stay 3 seconds
   sendFlightCmd("c setStayTime 3");
- //PTAM
+  //PTAM
   sendFlightCmd("c lockScaleFP");
 
   ndPause.sleep();
 
   //if you need tag detection, do it here.
   init_tag_det = true; //open the tag detection for initial stage
-  if(0 == current_tag)
+  if (0 == current_tag)
   {
-	  //do your work here.
+    //do your work here.
   }
   else
   {
-	 setTargetTag();//change the tag
-	 //do your work here
-	 setTargetTag();//chang the tag back
+    setTargetTag(); //change the tag
+    //do your work here
+    setTargetTag(); //chang the tag back
   }
-  init_tag_det = false;//open the tag detection for initial stage
+  init_tag_det = false; //open the tag detection for initial stage
   return true;
 }
 
@@ -356,24 +357,24 @@ void PRGPARDrone::flightToSearchTag()
 //  ndPause.sleep();
   /* commmands can be used
 
-	 "c commandstring"
-	 autoInit [int moveTimeMS] [int waitTimeMS] [int riseTimeMs] [float initSpeed]
-	 autoTakeover [int moveTimeMS] [int waitTimeMS] [int riseTimeMs] [float initSpeed]
-	 takeoff
-	 start
-	 setReference [doube x] [double y] [double z] [double yaw]
-	 setReference $POSE$
-     setMaxControl [double cap = 1.0]
-     setInitialReachDist [double dist = 0.2]
-     setStayWithinDist [double dist = 0.5]
-     setStayTime [double seconds = 2.0]
-     lockScaleFP
-     clearCommands
-     goto [doube x] [double y] [double z] [double yaw]
-     moveBy [doube x] [double y] [double z] [double yaw]
-     moveByRel [doube x] [double y] [double z] [double yaw]
-     land
-  */
+   "c commandstring"
+   autoInit [int moveTimeMS] [int waitTimeMS] [int riseTimeMs] [float initSpeed]
+   autoTakeover [int moveTimeMS] [int waitTimeMS] [int riseTimeMs] [float initSpeed]
+   takeoff
+   start
+   setReference [doube x] [double y] [double z] [double yaw]
+   setReference $POSE$
+   setMaxControl [double cap = 1.0]
+   setInitialReachDist [double dist = 0.2]
+   setStayWithinDist [double dist = 0.5]
+   setStayTime [double seconds = 2.0]
+   lockScaleFP
+   clearCommands
+   goto [doube x] [double y] [double z] [double yaw]
+   moveBy [doube x] [double y] [double z] [double yaw]
+   moveByRel [doube x] [double y] [double z] [double yaw]
+   land
+   */
 }
 
 /** Centering the target tag when the target tag is detected.
@@ -446,37 +447,38 @@ void PRGPARDrone::flightToHome()
 void PRGPARDrone::run()
 {
 //  std::cout << "Starting running" << std::endl;
-  while(ros::ok())
+  while (ros::ok())
   {
-    while(1)
-      ros::spinOnce();  ///sy hold on here
+    while (1)
+      ros::spinOnce(); ///sy hold on here
     ROS_INFO("A new spin begins!");
     ndPause.sleep();
 
     /*//for testing
      if(picture_flag == false)
-    {
-    	toggleCam();
-    	sendCmdToPiswarm();
-    }*/
+     {
+     toggleCam();
+     sendCmdToPiswarm();
+     }*/
 
-    if(start_flag == true){
-    	flightToTarget();
+    if (start_flag == true)
+    {
+      flightToTarget();
     }
-    if(detected_flag == true)
-	{
-    	centeringTag();
-	}
-	if(centering_flag == true)
-	{
-	  toggleCam(); //change camera to vertical
-	  picture_flag = true; //the call back will store and show the picture
-	}
-	if(return_flag == true)
-	{
+    if (detected_flag == true)
+    {
+      centeringTag();
+    }
+    if (centering_flag == true)
+    {
+      toggleCam(); //change camera to vertical
+      picture_flag = true; //the call back will store and show the picture
+    }
+    if (return_flag == true)
+    {
       sendCmdToPiswarm();
       flightToHome();
-	}
+    }
     ros::spinOnce();
   }
 }
@@ -486,7 +488,7 @@ void PRGPARDrone::run()
  */
 int main(int argc, char **argv)
 {
-  ros::init(argc, argv, "prgp_ardrone");	//Create node
+  ros::init(argc, argv, "prgp_ardrone"); //Create node
   ROS_INFO("Started prgp_ardrone Node. Hi from ARE 2014/15");
 
   PRGPARDrone PRGPARDrone;
@@ -499,14 +501,13 @@ int main(int argc, char **argv)
 
 void piswarmCmdRev(const std_msgs::StringConstPtr str)
 {
-	//ROS_INFO("%s",str->data.substr(0,1));
-	ROS_INFO_STREAM(*str);
-	ROS_INFO("%s\n",str->data.c_str());
-	//ROS_INFO("%s\n",str->data.substr(0,2));
-	std::string k = str->data.substr(0,1);
-	ROS_INFO("%s\n",k.c_str());
+  //ROS_INFO("%s",str->data.substr(0,1));
+  ROS_INFO_STREAM(*str);
+  ROS_INFO("%s\n",str->data.c_str());
+  //ROS_INFO("%s\n",str->data.substr(0,2));
+  std::string k = str->data.substr(0,1);
+  ROS_INFO("%s\n",k.c_str());
 }
-
 
 void takePic(const sensor_msgs::ImageConstPtr img)
 {
@@ -514,13 +515,12 @@ void takePic(const sensor_msgs::ImageConstPtr img)
   //show;
 }
 
-
 void tagResult(const ardrone_autonomy::Navdata &navdataReceived)
 {
   if(navdataReceived.tags_count > 0)
   {
-   //Send confirmation to piswarm, use publish
-    tag_detected = true ;
+    //Send confirmation to piswarm, use publish
+    tag_detected = true;
   }
 }
 
@@ -538,20 +538,20 @@ void currentPos(const tum_ardrone::filter_state& currentPos)
  */
 int main(int argc, char **argv)
 {
-  ros::init(argc, argv, "prgp_ardrone");	//Create node
+  ros::init(argc, argv, "prgp_ardrone"); //Create node
   ros::NodeHandle ndh_;
   ros::Duration ndPause;
 
   //Publishers
-  ros::Publisher landPub;			//send landing commands
-  ros::Publisher takeoffPub;		//send takeoff commands
-  ros::Publisher drone_pub;		//send commands to AR.Drone
-  ros::Publisher cmdPub;			//To sen cnd to PiSwarm
-  ros::Publisher velPub;			//send cmd directly to cmd_vel topic of the ardrone_autonomy
+  ros::Publisher landPub;//send landing commands
+  ros::Publisher takeoffPub;//send takeoff commands
+  ros::Publisher drone_pub;//send commands to AR.Drone
+  ros::Publisher cmdPub;//To sen cnd to PiSwarm
+  ros::Publisher velPub;//send cmd directly to cmd_vel topic of the ardrone_autonomy
 
   //Subscribers
-  ros::Subscriber cmdSub;			//To get cnd from PiSwarm
-  ros::Subscriber tagSub;			//To get Tag detection result
+  ros::Subscriber cmdSub;//To get cnd from PiSwarm
+  ros::Subscriber tagSub;//To get Tag detection result
   ros::Subscriber currentPosSub;
   ros::Subscriber imgSub;
 
@@ -577,42 +577,39 @@ int main(int argc, char **argv)
   toggleCamSrv = ndh_.serviceClient<std_srvs::Empty>("ardrone/togglecam",1);
   detecttypeSrv = ndh_.serviceClient<std_srvs::Empty>("ardrone/detecttype",1);
 
-  ndPause.sleep(); //Wait for 2 seconds to prepare publishers & subscribers
+  ndPause.sleep();//Wait for 2 seconds to prepare publishers & subscribers
   //int i = 1;
-
 
   while(ros::ok())
   {
-	 ROS_INFO("Hi from Liu");
-	 ndPause.sleep();
-	 /* if(i == 1)
-	 {
-	   ROS_INFO("change the detect type");
-	   detecttypeSrv.call(detect_srvs);
-	   i =0;
-	 }*/
+    ROS_INFO("Hi from Liu");
+    ndPause.sleep();
+    /* if(i == 1)
+     {
+     ROS_INFO("change the detect type");
+     detecttypeSrv.call(detect_srvs);
+     i =0;
+     }*/
 
-	 /* if(i == 1)
-	 {
-	 	ROS_INFO("toggle the camera");
-	 	toggleCamSrv.call(toggle_srvs);
-	 	i =0;
-	 }*/
+    /* if(i == 1)
+     {
+     ROS_INFO("toggle the camera");
+     toggleCamSrv.call(toggle_srvs);
+     i =0;
+     }*/
 
-     /*
-	 c_Pi = " ";
-	 c_Pi = "b";
-	 s_Pi.data = c_Pi.c_str();
-	 cmdPub.publish(s_Pi);
-	 ndPause.sleep();
-	 ndPause.sleep();
-	 */
+    /*
+     c_Pi = " ";
+     c_Pi = "b";
+     s_Pi.data = c_Pi.c_str();
+     cmdPub.publish(s_Pi);
+     ndPause.sleep();
+     ndPause.sleep();
+     */
 
-     ros::spinOnce();
+    ros::spinOnce();
   }
   return 0;
 }
 #endif //end of CLASS_STYLE
-
-
 
