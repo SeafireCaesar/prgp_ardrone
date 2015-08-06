@@ -56,6 +56,12 @@
 #include "ardrone_autonomy/Navdata.h"
 #include "tum_ardrone/filter_state.h"
 
+///sy   taking picture headers ########################
+#include "cvd/image_io.h"
+#include <cv_bridge/cv_bridge.h>
+#include <sensor_msgs/image_encodings.h>
+#include <iostream>
+
 #include <unistd.h>
 #include <sstream>
 #include <cmath>
@@ -72,7 +78,7 @@
 
 /** The main class for the prgp_ardrone package.
  */
-class PrgpARDrone
+class PRGPARDrone
 {
 private:
   ros::NodeHandle ndh_; /**< ROS node handle */
@@ -100,8 +106,8 @@ private:
   ros::ServiceClient detecttypeSrv; /**< Service client to send empty service to change the detection configuration */
 
   //messages
-  std_msgs::String s; /**< Message for sending flight command to AR.Drone by /tum_ardrone/com*/
-  std::string c;
+  //std_msgs::String s; /**< Message for sending flight command to AR.Drone by /tum_ardrone/com*/
+  //std::string c;
 
   std_msgs::String s_Pi; /**< Message for sending command to Pi-Swarm by piswarm_com*/
   std::string c_Pi;
@@ -137,8 +143,8 @@ private:
   float tag_orient = 0;
 
 public:
-  PrgpARDrone(void);
-  ~PrgpARDrone(void);
+  PRGPARDrone(void);
+  ~PRGPARDrone(void);
 
   void run();
 
@@ -154,14 +160,16 @@ public:
   void sendVelCmd();
   void takeOff();
   void land();
-  void sendFlightCnd();
+  void sendFlightCmd(std::string c);
   void toggleCam();
   void setTargetTag();
-  void initialARDrone();
+  bool initARDrone();
   void centeringTag();
   void flightToSearchTag();
   void flightToTarget();
   void flightToHome();
+  void moveToPose(double x, double y, double z, double yaw);
+  void moveBy(double x, double y, double z, double yaw);
 };
 
 #else //else for CLASS_STYLE
