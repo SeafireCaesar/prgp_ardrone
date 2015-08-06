@@ -98,6 +98,9 @@ private:
   ros::Subscriber currentPosSub; /**< Subscriber to get the current position of the AR.Drone */
   ros::Subscriber imgSub; /**< Subscriber to get the image from camera by /ardrone/image_raw */
 
+  //Rob#
+  ros::Subscriber cmdCompleteSub;
+
   // services
   ros::ServiceClient toggleCamSrv; /**< Service client to send empty service to toggle the camera */
   ros::ServiceClient detecttypeSrv; /**< Service client to send empty service to change the detection configuration */
@@ -121,16 +124,25 @@ private:
   double currentPos_x;
   double currentPos_y;
   bool start_flag; /**< The value will be true when AR.Drone get the recruiting command from Pi-Swarm */
+  bool initialising_PTAM_flag; //Rob# /**The value will be true whilst drone is taking off and performing initial movements to configure PTAM and locate home tag */
+  bool aligning_to_home_tag; //Rob# /**The value will be true until the drone has centered above home tag and set new reference */
   bool detected_flag; /**< The value will be true when AR.Drone detect the target tag during the flight */
   bool centering_flag; /**< The value will be true before AR.Drone centering the tag */
-  bool picture_flag; /**< The value will be true before taking the picture */
-  bool return_flag; /**< The value will be true before returning the Pi-Swarm back home */
-  bool init_tag_det; /**< The value will be true to activate the tag detection at the initial stage of AR.Drone */
+  bool picture_flag; /**< The value will be true before taking the picture */ //Rob# this name is not too clear. before_picture_flag would be better
+  bool return_flag; /**< The value will be true before returning the Pi-Swarm back home */ //Rob# this name is not too clear. before_return_flag would be better
+  bool init_tag_det; /**< The value will be true to activate the tag detection at the initial stage of AR.Drone */ //Rob# Is this the target tag? Maybe use target_tag or ttag distinguish
   bool init_detected_flag; /**< The value will be true when tag detected at the initial stage */
   bool home_tag_det; /**< The value will be true to activate the tag detection at the home stage of AR.Drone */
   bool home_detected_flag; /**< The value will be true when tag detected at home stage */
+  bool executing_command_flag; //Rob# /**< this value will be true whilst the drone is executing a tum command, it will be set to false after a callback */
   uint16_t current_tag; /**< change when setTargetTag() is used, 0 for black_roundel, 1 for COCARDE */
   uint16_t tag_type; /**< 0 for black_roundel, 1 for COCARDE, 2 for mixed tag type (current_tag is 0) */
+  bool reference_set;
+  //Rob#
+  float altitude;
+  uint32_t tag_x_coord = 0;
+  uint32_t tag_y_coord = 0;
+  float tag_orient = 0;
 
 public:
   PRGPARDrone(void);
@@ -143,6 +155,7 @@ public:
   void takePic(const sensor_msgs::ImageConstPtr img);
   void acquireTagResult(const ardrone_autonomy::Navdata &navdataReceived);
   void acquireCurrentPos(const tum_ardrone::filter_state& currentPos);
+  void noteCmdCompleted(std_msgs::EmptyConstPtr);
 
   //functions
   void sendCmdToPiswarm();
@@ -158,7 +171,11 @@ public:
   void flightToTarget();
   void flightToHome();
   void moveToPose(double x, double y, double z, double yaw);
+<<<<<<< HEAD
   void stopCmdAndHover();
+=======
+  void moveBy(double x, double y, double z, double yaw);
+>>>>>>> ca07d90c8d87db22b636d417c4f1144f2590cc80
 };
 
 #else //else for CLASS_STYLE
