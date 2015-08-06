@@ -1,36 +1,36 @@
 /*
-* Software License Agreement (BSD License)
-*
-* Copyright (c) 2015, University of York Robotics Laboratory (YRL).
-* All rights reserved.
-*
-* Redistribution and use in source and binary forms, with or without
-* modification, are permitted provided that the following conditions
-* are met:
-*
-* * Redistributions of source code must retain the above copyright
-*   notice, this list of conditions and the following disclaimer.
-* * Redistributions in binary form must reproduce the above
-*   copyright notice, this list of conditions and the following
-*   disclaimer in the documentation and/or other materials provided
-*   with the distribution.
-* * Neither the name of the copyright holder nor the names of its
-*   contributors may be used to endorse or promote products derived
-*   from this software without specific prior written permission.
-*
-* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-* "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-* LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
-* FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-* COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-* INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-* BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-* LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-* LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-* ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-* POSSIBILITY OF SUCH DAMAGE.
-*/
+ * Software License Agreement (BSD License)
+ *
+ * Copyright (c) 2015, University of York Robotics Laboratory (YRL).
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * * Redistributions of source code must retain the above copyright
+ *   notice, this list of conditions and the following disclaimer.
+ * * Redistributions in binary form must reproduce the above
+ *   copyright notice, this list of conditions and the following
+ *   disclaimer in the documentation and/or other materials provided
+ *   with the distribution.
+ * * Neither the name of the copyright holder nor the names of its
+ *   contributors may be used to endorse or promote products derived
+ *   from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /**
  *  @file prgp_ardrone.h
@@ -82,7 +82,7 @@ private:
   //Publishers
   ros::Publisher landPub; /**< Publisher for sending the landing command directly to AR.Drone*/
   ros::Publisher takeoffPub; /**< Publisher for sending the takeoff command directly to AR.Drone */
-  ros::Publisher drone_pub;	/**< Publisher for sending flight command to AR.Drone by /tum_ardrone/com */
+  ros::Publisher drone_pub; /**< Publisher for sending flight command to AR.Drone by /tum_ardrone/com */
   ros::Publisher cmdPub; /**< Publisher for sending the command to Pi-Swarm by piswarm_com */
   ros::Publisher velPub; /**< Publisher for sending the command directly to AR.Drone by cmd_vel */
 
@@ -91,6 +91,9 @@ private:
   ros::Subscriber tagSub; /**< Subscriber to get the navdata, especially the tag result by /ardrone/navdata */
   ros::Subscriber currentPosSub; /**< Subscriber to get the current position of the AR.Drone */
   ros::Subscriber imgSub; /**< Subscriber to get the image from camera by /ardrone/image_raw */
+
+  //Rob#
+  ros::Subscriber cmdCompleteSub;
 
   // services
   ros::ServiceClient toggleCamSrv; /**< Service client to send empty service to toggle the camera */
@@ -113,16 +116,25 @@ private:
   double currentPos_x;
   double currentPos_y;
   bool start_flag; /**< The value will be true when AR.Drone get the recruiting command from Pi-Swarm */
+  bool initialising_PTAM_flag; //Rob# /**The value will be true whilst drone is taking off and performing initial movements to configure PTAM and locate home tag */
+  bool aligning_to_home_tag; //Rob# /**The value will be true until the drone has centered above home tag and set new reference */
   bool detected_flag; /**< The value will be true when AR.Drone detect the target tag during the flight */
   bool centering_flag; /**< The value will be true before AR.Drone centering the tag */
-  bool picture_flag; /**< The value will be true before taking the picture */
-  bool return_flag; /**< The value will be true before returning the Pi-Swarm back home */
-  bool init_tag_det; /**< The value will be true to activate the tag detection at the initial stage of AR.Drone */
+  bool picture_flag; /**< The value will be true before taking the picture */ //Rob# this name is not too clear. before_picture_flag would be better
+  bool return_flag; /**< The value will be true before returning the Pi-Swarm back home */ //Rob# this name is not too clear. before_return_flag would be better
+  bool init_tag_det; /**< The value will be true to activate the tag detection at the initial stage of AR.Drone */ //Rob# Is this the target tag? Maybe use target_tag or ttag distinguish
   bool init_detected_flag; /**< The value will be true when tag detected at the initial stage */
   bool home_tag_det; /**< The value will be true to activate the tag detection at the home stage of AR.Drone */
   bool home_detected_flag; /**< The value will be true when tag detected at home stage */
+  bool executing_command_flag; //Rob# /**< this value will be true whilst the drone is executing a tum command, it will be set to false after a callback */
   uint16_t current_tag; /**< change when setTargetTag() is used, 0 for black_roundel, 1 for COCARDE */
   uint16_t tag_type; /**< 0 for black_roundel, 1 for COCARDE, 2 for mixed tag type (current_tag is 0) */
+  bool reference_set;
+  //Rob#
+  float altitude;
+  uint32_t tag_x_coord = 0;
+  uint32_t tag_y_coord = 0;
+  float tag_orient = 0;
 
 public:
   PrgpARDrone(void);
@@ -135,6 +147,7 @@ public:
   void takePic(const sensor_msgs::ImageConstPtr img);
   void acquireTagResult(const ardrone_autonomy::Navdata &navdataReceived);
   void acquireCurrentPos(const tum_ardrone::filter_state& currentPos);
+  void noteCmdCompleted(std_msgs::EmptyConstPtr);
 
   //functions
   void sendCmdToPiswarm();
@@ -171,6 +184,5 @@ float currentPos_y;
 bool tag_detected = false;
 
 #endif//end of CLASS_STYLE
-
 
 #endif /* PRGP_ARDRONE_INCLUDE_PRGP_ARDRONE_H_ */
