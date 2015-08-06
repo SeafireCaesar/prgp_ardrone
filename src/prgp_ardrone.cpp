@@ -75,7 +75,7 @@ PRGPARDrone::PRGPARDrone()
   toggleCamSrv = ndh_.serviceClient<std_srvs::Empty>("/ardrone/togglecam", 1);
   detecttypeSrv = ndh_.serviceClient<std_srvs::Empty>("/ardrone/detecttype", 1);
   stopCmdAndHoverSrv = ndh_.serviceClient<std_srvs::Empty>("drone_autopilot/clearCommands", 1);
-  stopCmdAndHoverSrv = ndh_.serviceClient<std_srvs::Empty>("drone_autopilot/clearCommands",1);
+  stopCmdAndHoverSrv = ndh_.serviceClient<std_srvs::Empty>("drone_autopilot/clearCommands", 1);
 
   //Variables
   start_flag = false;
@@ -388,7 +388,8 @@ bool PRGPARDrone::initARDrone()
   double command_list[8][4] = { {0, 0.5, EXTRA_HEIGHT, 0}, {0, -0.5, EXTRA_HEIGHT, 0}, {0.5, 0.0, EXTRA_HEIGHT, 0}, {
       -0.5, 0, EXTRA_HEIGHT, 0},
                                {0.75, 0.75, EXTRA_HEIGHT, 0}, {0.75, -0.75, EXTRA_HEIGHT, 0}, {-0.75, -0.75,
-                                                                                               EXTRA_HEIGHT, 0},
+                               EXTRA_HEIGHT,
+                                                                                               0},
                                {-0.75, 0.75, EXTRA_HEIGHT, 0}};
 
   int i = 0;
@@ -495,7 +496,7 @@ bool PRGPARDrone::centeringTag(double current_height)
       }
       else
       {
-        ROS_INFO("x coord is: %d, y coord is: %d",tag_x_coord,tag_y_coord);
+        ROS_INFO("x coord is: %d, y coord is: %d", tag_x_coord, tag_y_coord);
         ROS_INFO("Moving so Tag is at centre");
         moveBy(x_move, y_move, 0.0, angle_to_turn);
         ndPause.sleep();
@@ -505,10 +506,10 @@ bool PRGPARDrone::centeringTag(double current_height)
       }
     }
 
-    if(detected_flag == true)
+    if (detected_flag == true)
     {
       ROS_INFO("Drone centred above Tag");
-          return true;
+      return true;
     }
 
   }
@@ -519,7 +520,7 @@ bool PRGPARDrone::centeringTag(double current_height)
     return false;
   }
   return false;
- //Check if the tag is detected
+  //Check if the tag is detected
 //  centering_flag = true;
 }
 
@@ -592,13 +593,13 @@ void PRGPARDrone::flightToHome()
 void PRGPARDrone::run()
 {
 
-ROS_INFO("Starting running");
+  ROS_INFO("Starting running");
 
-if (ros::ok())
-{
+  if (ros::ok())
+  {
 //while(1)
 // ROS_DEBUG("aaaa");
-initARDrone();
+    initARDrone();
 
 //    std::string commandArray2[22] = {"c goto 0.0 -0.75 0.0 0.0", //1
 //        "c goto 0.0 -1.5 0.0 0.0", //2
@@ -632,26 +633,26 @@ initARDrone();
 //      ros::spinOnce();
 //      i++;
 //    }
-ndPause.sleep();
-ndPause.sleep();
-ndPause.sleep();
-ndPause.sleep();
-ndPause.sleep();
-ndPause.sleep();
-sendFlightCmd("c land");
-ndPause.sleep();
-ndPause.sleep();
-ndPause.sleep();
-ndPause.sleep();
-ndPause.sleep();
-ndPause.sleep();
+    ndPause.sleep();
+    ndPause.sleep();
+    ndPause.sleep();
+    ndPause.sleep();
+    ndPause.sleep();
+    ndPause.sleep();
+    sendFlightCmd("c land");
+    ndPause.sleep();
+    ndPause.sleep();
+    ndPause.sleep();
+    ndPause.sleep();
+    ndPause.sleep();
+    ndPause.sleep();
 //      std::cout << "**** executing_command_flag" << executing_command_flag << " after command sent" << std::endl;
 //      ros::spinOnce();
 //      std::cout << "**** executing_command_flag" << executing_command_flag << " after spinOnce" << std::endl;
 //      executing_command_flag = true;
 //      std::cout << "**** executing_command_flag" << executing_command_flag << " after reset" << std::endl;
 
-}
+  }
 
 //    while(executing_command_flag == true)
 //    {
@@ -710,7 +711,7 @@ int main(int argc, char **argv)
   PRGPARDrone PRGPARDrone;
   PRGPARDrone.run();
 
-return 0;
+  return 0;
 }
 
 #else
@@ -751,8 +752,8 @@ print(*a) -> 5
  */
 void currentPos(const tum_ardrone::filter_state& currentPos)
 {
-currentPos_x = currentPos.x;
-currentPos_y = currentPos.y;
+  currentPos_x = currentPos.x;
+  currentPos_y = currentPos.y;
 }
 
 /**
