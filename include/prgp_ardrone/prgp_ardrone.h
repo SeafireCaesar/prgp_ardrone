@@ -146,8 +146,6 @@ private:
   uint32_t tag_y_coord = 0;
   float tag_orient = 0;
 
-
-
   typedef struct drone_pose
   {
     double x;
@@ -155,7 +153,6 @@ private:
     double z;
     double yaw;
   } pose_type;
-
 
 public:
   PRGPARDrone(void);
