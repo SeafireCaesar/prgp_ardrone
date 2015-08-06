@@ -106,6 +106,7 @@ private:
   // services
   ros::ServiceClient toggleCamSrv; /**< Service client to send empty service to toggle the camera */
   ros::ServiceClient detecttypeSrv; /**< Service client to send empty service to change the detection configuration */
+  ros::ServiceClient stopCmdAndHoverSrv; /**< Service client to send empty service to stop the current flight command and then hovering */
 
   //messages
   //std_msgs::String s; /**< Message for sending flight command to AR.Drone by /tum_ardrone/com*/
@@ -116,6 +117,7 @@ private:
 
   std_srvs::Empty toggle_srvs; /**< Service from client to server to toggle the camera */
   std_srvs::Empty detect_srvs; /**< Service from client to server to change the detection configuration */
+  std_srvs::Empty stopCmd_srvs; /**< Service from client to server to stop the current flight command */
   geometry_msgs::Twist velCmd; /**< Message for the cmd_vel topic to AR.Drone */
 
   static pthread_mutex_t send_CS;
@@ -182,7 +184,11 @@ public:
   void flightToTarget();
   void flightToHome();
   void moveToPose(double x, double y, double z, double yaw);
+<<<<<<< HEAD
+  void stopCmdAndHover();
+=======
   void moveBy(double x, double y, double z, double yaw);
+>>>>>>> ca07d90c8d87db22b636d417c4f1144f2590cc80
 };
 
 #else //else for CLASS_STYLE
