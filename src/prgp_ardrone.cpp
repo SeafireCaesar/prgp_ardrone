@@ -97,7 +97,7 @@ PRGPARDrone::~PRGPARDrone(void)
  *  prgp_piswarmcom package. Then the prgp_piswarmcom package publish the command to the piswarm_com
  *  topic. This function get the command from the piswarm_com topic.
  */
-void PRGPARDrone::piswarmCmdRev(const std_msgs::StringConstPtr str)
+void PRGPARDrone::piswarmCmdRevCb(const std_msgs::StringConstPtr str)
 {
 
   ROS_INFO_STREAM(*str);
@@ -128,7 +128,7 @@ void PRGPARDrone::piswarmCmdRev(const std_msgs::StringConstPtr str)
  *  When picture_flag become true, this function will start the taking picture function
  *  which get the image from the topic and process the image.
  */
-void PRGPARDrone::takePic(const sensor_msgs::ImageConstPtr img)
+void PRGPARDrone::takePicCb(const sensor_msgs::ImageConstPtr img)
 {
   std::fstream image;
   CVD::Image<CVD::byte> new_image;
@@ -164,7 +164,7 @@ void PRGPARDrone::takePic(const sensor_msgs::ImageConstPtr img)
  *  Getting the navdata from the topic and process the data. Then reporting the detection result
  *  for different stages, including the initial stage, flight stage and home stage of the AR.Drone.
  */
-void PRGPARDrone::acquireTagResult(const ardrone_autonomy::Navdata &navdataReceived)
+void PRGPARDrone::acquireTagResultCb(const ardrone_autonomy::Navdata &navdataReceived)
 {
   if (navdataReceived.tags_count > 0)
   {
@@ -209,7 +209,7 @@ void PRGPARDrone::acquireTagResult(const ardrone_autonomy::Navdata &navdataRecei
 /** Callback function for /ardrone/predictedPose to get the current position of AR.Drone.
  *  Getting the data from the topic and process it for different requirements.
  */
-void PRGPARDrone::acquireCurrentPos(const tum_ardrone::filter_state& currentPos)
+void PRGPARDrone::acquireCurrentPosCb(const tum_ardrone::filter_state& currentPos)
 {
   currentPos_x = currentPos.x;
   currentPos_y = currentPos.y;
@@ -221,6 +221,8 @@ void PRGPARDrone::acquireCurrentPos(const tum_ardrone::filter_state& currentPos)
  */
 void PRGPARDrone::sendCmdToPiswarm()
 {
+  std_msgs::String s_Pi; /**< Message for sending command to Pi-Swarm by piswarm_com*/
+  std::string c_Pi;
   c_Pi = "b";
   s_Pi.data = c_Pi.c_str();
   cmdPub.publish(s_Pi);

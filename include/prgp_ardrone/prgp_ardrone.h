@@ -107,8 +107,8 @@ private:
   //std_msgs::String s; /**< Message for sending flight command to AR.Drone by /tum_ardrone/com*/
   //std::string c;
 
-  std_msgs::String s_Pi; /**< Message for sending command to Pi-Swarm by piswarm_com*/
-  std::string c_Pi;
+//  std_msgs::String s_Pi; /**< Message for sending command to Pi-Swarm by piswarm_com*/
+//  std::string c_Pi;
 
   std_srvs::Empty toggle_srvs; /**< Service from client to server to toggle the camera */
   std_srvs::Empty detect_srvs; /**< Service from client to server to change the detection configuration */
@@ -139,10 +139,10 @@ public:
   void run();
 
   // callbacks
-  void piswarmCmdRev(const std_msgs::StringConstPtr str);
-  void takePic(const sensor_msgs::ImageConstPtr img);
-  void acquireTagResult(const ardrone_autonomy::Navdata &navdataReceived);
-  void acquireCurrentPos(const tum_ardrone::filter_state& currentPos);
+  void piswarmCmdRevCb(const std_msgs::StringConstPtr str);
+  void takePicCb(const sensor_msgs::ImageConstPtr img);
+  void acquireTagResultCb(const ardrone_autonomy::Navdata &navdataReceived);
+  void acquireCurrentPosCb(const tum_ardrone::filter_state& currentPos);
 
   //functions
   void sendCmdToPiswarm();
