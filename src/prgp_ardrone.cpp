@@ -66,10 +66,10 @@ PRGPARDrone::PRGPARDrone()
   velPub = ndh_.advertise<geometry_msgs::Twist>("cmd_vel", 1);
 
   //Subscribers
-  cmdSub = ndh_.subscribe("piswarm_com", 1, &PRGPARDrone::piswarmCmdRev, this);
-  tagSub = ndh_.subscribe("/ardrone/navdata", 1, &PRGPARDrone::acquireTagResult, this);
-  currentPosSub = ndh_.subscribe("/ardrone/predictedPose", 1, &PRGPARDrone::acquireCurrentPos, this);
-  imgSub = ndh_.subscribe("/ardrone/image_raw", 10, &PRGPARDrone::takePic, this);
+  cmdSub = ndh_.subscribe("piswarm_com", 1, &PRGPARDrone::piswarmCmdRevCb, this);
+  tagSub = ndh_.subscribe("/ardrone/navdata", 1, &PRGPARDrone::acquireTagResultCb, this);
+  currentPosSub = ndh_.subscribe("/ardrone/predictedPose", 1, &PRGPARDrone::acquireCurrentPosCb, this);
+  imgSub = ndh_.subscribe("/ardrone/image_raw", 10, &PRGPARDrone::takePicCb, this);
 
   //Service client
   toggleCamSrv = ndh_.serviceClient<std_srvs::Empty>("/ardrone/togglecam", 1);
