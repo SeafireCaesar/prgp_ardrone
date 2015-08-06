@@ -112,8 +112,8 @@ private:
   //std_msgs::String s; /**< Message for sending flight command to AR.Drone by /tum_ardrone/com*/
   //std::string c;
 
-  std_msgs::String s_Pi; /**< Message for sending command to Pi-Swarm by piswarm_com*/
-  std::string c_Pi;
+//  std_msgs::String s_Pi; /**< Message for sending command to Pi-Swarm by piswarm_com*/
+//  std::string c_Pi;
 
   std_srvs::Empty toggle_srvs; /**< Service from client to server to toggle the camera */
   std_srvs::Empty detect_srvs; /**< Service from client to server to change the detection configuration */
@@ -164,11 +164,10 @@ public:
   void run();
 
   // callbacks
-  void piswarmCmdRev(const std_msgs::StringConstPtr str);
-  void takePic(const sensor_msgs::ImageConstPtr img);
-  void acquireTagResult(const ardrone_autonomy::Navdata &navdataReceived);
-  void acquireCurrentPos(const tum_ardrone::filter_state& currentPos);
-  void noteCmdCompleted(std_msgs::EmptyConstPtr);
+  void piswarmCmdRevCb(const std_msgs::StringConstPtr str);
+  void takePicCb(const sensor_msgs::ImageConstPtr img);
+  void acquireTagResultCb(const ardrone_autonomy::Navdata &navdataReceived);
+  void acquireCurrentPosCb(const tum_ardrone::filter_state& currentPos);
 
   //functions
   void sendCmdToPiswarm();
@@ -184,11 +183,8 @@ public:
   void flightToTarget();
   void flightToHome();
   void moveToPose(double x, double y, double z, double yaw);
-<<<<<<< HEAD
   void stopCmdAndHover();
-=======
   void moveBy(double x, double y, double z, double yaw);
->>>>>>> ca07d90c8d87db22b636d417c4f1144f2590cc80
 };
 
 #else //else for CLASS_STYLE

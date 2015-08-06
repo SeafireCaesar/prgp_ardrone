@@ -66,15 +66,15 @@ PRGPARDrone::PRGPARDrone()
   velPub = ndh_.advertise<geometry_msgs::Twist>("cmd_vel", 1);
 
   //Subscribers
-
-  cmdSub = ndh_.subscribe("piswarm_com", 1, &PRGPARDrone::piswarmCmdRev, this);
-  tagSub = ndh_.subscribe("/ardrone/navdata", 1, &PRGPARDrone::acquireTagResult, this);
-  currentPosSub = ndh_.subscribe("/ardrone/predictedPose", 1, &PRGPARDrone::acquireCurrentPos, this);
-  imgSub = ndh_.subscribe("/ardrone/image_raw", 10, &PRGPARDrone::takePic, this);
+  cmdSub = ndh_.subscribe("piswarm_com", 1, &PRGPARDrone::piswarmCmdRevCb, this);
+  tagSub = ndh_.subscribe("/ardrone/navdata", 1, &PRGPARDrone::acquireTagResultCb, this);
+  currentPosSub = ndh_.subscribe("/ardrone/predictedPose", 1, &PRGPARDrone::acquireCurrentPosCb, this);
+  imgSub = ndh_.subscribe("/ardrone/image_raw", 10, &PRGPARDrone::takePicCb, this);
 
   //Service client
   toggleCamSrv = ndh_.serviceClient<std_srvs::Empty>("/ardrone/togglecam", 1);
   detecttypeSrv = ndh_.serviceClient<std_srvs::Empty>("/ardrone/detecttype", 1);
+  stopCmdAndHoverSrv = ndh_.serviceClient<std_srvs::Empty>("drone_autopilot/clearCommands", 1);
   stopCmdAndHoverSrv = ndh_.serviceClient<std_srvs::Empty>("drone_autopilot/clearCommands",1);
 
   //Variables
@@ -104,7 +104,7 @@ PRGPARDrone::~PRGPARDrone(void)
  *  prgp_piswarmcom package. Then the prgp_piswarmcom package publish the command to the piswarm_com
  *  topic. This function get the command from the piswarm_com topic.
  */
-void PRGPARDrone::piswarmCmdRev(const std_msgs::StringConstPtr str)
+void PRGPARDrone::piswarmCmdRevCb(const std_msgs::StringConstPtr str)
 {
 
   ROS_INFO_STREAM(*str);
@@ -135,14 +135,13 @@ void PRGPARDrone::piswarmCmdRev(const std_msgs::StringConstPtr str)
  *  When picture_flag become true, this function will start the taking picture function
  *  which get the image from the topic and process the image.
  */
-void PRGPARDrone::takePic(const sensor_msgs::ImageConstPtr img)
+void PRGPARDrone::takePicCb(const sensor_msgs::ImageConstPtr img)
 {
 
   std::fstream image;
   CVD::Image<CVD::byte> new_image;
   static bool once = true;
   if (once) ///sy TODO change the flag
-
   {
     once = false;
     cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::MONO8);
@@ -173,7 +172,7 @@ void PRGPARDrone::takePic(const sensor_msgs::ImageConstPtr img)
  *  Getting the navdata from the topic and process the data. Then reporting the detection result
  *  for different stages, including the initial stage, flight stage and home stage of the AR.Drone.
  */
-void PRGPARDrone::acquireTagResult(const ardrone_autonomy::Navdata &navdataReceived)
+void PRGPARDrone::acquireTagResultCb(const ardrone_autonomy::Navdata &navdataReceived)
 {
   altitude = navdataReceived.altd / 1000.0;
   if (navdataReceived.tags_count > 0)
@@ -220,7 +219,7 @@ void PRGPARDrone::acquireTagResult(const ardrone_autonomy::Navdata &navdataRecei
 /** Callback function for /ardrone/predictedPose to get the current position of AR.Drone.
  *  Getting the data from the topic and process it for different requirements.
  */
-void PRGPARDrone::acquireCurrentPos(const tum_ardrone::filter_state& currentPos)
+void PRGPARDrone::acquireCurrentPosCb(const tum_ardrone::filter_state& currentPos)
 {
   currentPos_x = currentPos.x;
   currentPos_y = currentPos.y;
@@ -232,6 +231,8 @@ void PRGPARDrone::acquireCurrentPos(const tum_ardrone::filter_state& currentPos)
  */
 void PRGPARDrone::sendCmdToPiswarm()
 {
+  std_msgs::String s_Pi; /**< Message for sending command to Pi-Swarm by piswarm_com*/
+  std::string c_Pi;
   c_Pi = "b";
   s_Pi.data = c_Pi.c_str();
   cmdPub.publish(s_Pi);
@@ -401,7 +402,6 @@ bool PRGPARDrone::initARDrone()
     ros::spinOnce();
     i++;
   }
-
   if (detected_flag == true)
   {
     centeringTag(DESIRED_HEIGHT + EXTRA_HEIGHT);
@@ -704,11 +704,11 @@ ndPause.sleep();
  */
 int main(int argc, char **argv)
 {
-ros::init(argc, argv, "prgp_ardrone"); //Create node
-ROS_INFO("Started prgp_ardrone Node. Hi from ARE 2014/15");
+  ros::init(argc, argv, "prgp_ardrone"); //Create node
+  ROS_INFO("Started prgp_ardrone Node. Hi from ARE 2014/15");
 
-PRGPARDrone PRGPARDrone;
-PRGPARDrone.run();
+  PRGPARDrone PRGPARDrone;
+  PRGPARDrone.run();
 
 return 0;
 }
@@ -717,12 +717,12 @@ return 0;
 
 void piswarmCmdRev(const std_msgs::StringConstPtr str)
 {
-//ROS_INFO("%s",str->data.substr(0,1));
-ROS_INFO_STREAM(*str);
-ROS_INFO("%s\n",str->data.c_str());
-//ROS_INFO("%s\n",str->data.substr(0,2));
-std::string k = str->data.substr(0,1);
-ROS_INFO("%s\n",k.c_str());
+  //ROS_INFO("%s",str->data.substr(0,1));
+  ROS_INFO_STREAM(*str);
+  ROS_INFO("%s\n",str->data.c_str());
+  //ROS_INFO("%s\n",str->data.substr(0,2));
+  std::string k = str->data.substr(0,1);
+  ROS_INFO("%s\n",k.c_str());
 }
 
 void takePic(const sensor_msgs::ImageConstPtr img)
@@ -733,11 +733,11 @@ void takePic(const sensor_msgs::ImageConstPtr img)
 
 void tagResult(const ardrone_autonomy::Navdata &navdataReceived)
 {
-if(navdataReceived.tags_count > 0)
-{
-//Send confirmation to piswarm, use publish
-tag_detected = true;
-}
+  if(navdataReceived.tags_count > 0)
+  {
+    //Send confirmation to piswarm, use publish
+    tag_detected = true;
+  }
 }
 int * a;
 int x = 5;
@@ -760,78 +760,78 @@ currentPos_y = currentPos.y;
  */
 int main(int argc, char **argv)
 {
-ros::init(argc, argv, "prgp_ardrone"); //Create node
-ros::NodeHandle ndh_;
-ros::Duration ndPause;
+  ros::init(argc, argv, "prgp_ardrone"); //Create node
+  ros::NodeHandle ndh_;
+  ros::Duration ndPause;
 
-//Publishers
-ros::Publisher landPub;//send landing commands
-ros::Publisher takeoffPub;//send takeoff commands
-ros::Publisher drone_pub;//send commands to AR.Drone
-ros::Publisher cmdPub;//To sen cnd to PiSwarm
-ros::Publisher velPub;//send cmd directly to cmd_vel topic of the ardrone_autonomy
+  //Publishers
+  ros::Publisher landPub;//send landing commands
+  ros::Publisher takeoffPub;//send takeoff commands
+  ros::Publisher drone_pub;//send commands to AR.Drone
+  ros::Publisher cmdPub;//To sen cnd to PiSwarm
+  ros::Publisher velPub;//send cmd directly to cmd_vel topic of the ardrone_autonomy
 
-//Subscribers
-ros::Subscriber cmdSub;//To get cnd from PiSwarm
-ros::Subscriber tagSub;//To get Tag detection result
-ros::Subscriber currentPosSub;
-ros::Subscriber imgSub;
+  //Subscribers
+  ros::Subscriber cmdSub;//To get cnd from PiSwarm
+  ros::Subscriber tagSub;//To get Tag detection result
+  ros::Subscriber currentPosSub;
+  ros::Subscriber imgSub;
 
-ros::ServiceClient toggleCamSrv;
-ros::ServiceClient detecttypeSrv;
+  ros::ServiceClient toggleCamSrv;
+  ros::ServiceClient detecttypeSrv;
 
-ndPause = ros::Duration(2,0);
-/*Publishers*/
-//if sometimes the topic cannot be reslived, try to change the topic below to "ndh_.resolveName("topic")"
-landPub = ndh_.advertise<std_msgs::Empty>("/ardrone/land",1);
-takeoffPub = ndh_.advertise<std_msgs::Empty>("/ardrone/takeoff",1);
-drone_pub = ndh_.advertise<std_msgs::String>("tum_ardrone/com",50);
-cmdPub = ndh_.advertise<std_msgs::String>("piswarm_com", 1);
-velPub = ndh_.advertise<geometry_msgs::Twist>("cmd_vel",1);
+  ndPause = ros::Duration(2,0);
+  /*Publishers*/
+  //if sometimes the topic cannot be reslived, try to change the topic below to "ndh_.resolveName("topic")"
+  landPub = ndh_.advertise<std_msgs::Empty>("/ardrone/land",1);
+  takeoffPub = ndh_.advertise<std_msgs::Empty>("/ardrone/takeoff",1);
+  drone_pub = ndh_.advertise<std_msgs::String>("tum_ardrone/com",50);
+  cmdPub = ndh_.advertise<std_msgs::String>("piswarm_com", 1);
+  velPub = ndh_.advertise<geometry_msgs::Twist>("cmd_vel",1);
 
-/*Subscribers*/
-//if sometimes the topic cannot be reslived, try to change the topic below to "ndh_.resolveName("topic")"
-cmdSub = ndh_.subscribe("piswarm_com", 1, piswarmCmdRev);
-tagSub = ndh_.subscribe("/ardrone/navdata", 1, tagResult);
-currentPosSub = ndh_.subscribe("/ardrone/predictedPose", 1, currentPos);
-imgSub = ndh_.subscribe("ardrone/image_raw",10, takePic);
+  /*Subscribers*/
+  //if sometimes the topic cannot be reslived, try to change the topic below to "ndh_.resolveName("topic")"
+  cmdSub = ndh_.subscribe("piswarm_com", 1, piswarmCmdRev);
+  tagSub = ndh_.subscribe("/ardrone/navdata", 1, tagResult);
+  currentPosSub = ndh_.subscribe("/ardrone/predictedPose", 1, currentPos);
+  imgSub = ndh_.subscribe("ardrone/image_raw",10, takePic);
 
-toggleCamSrv = ndh_.serviceClient<std_srvs::Empty>("ardrone/togglecam",1);
-detecttypeSrv = ndh_.serviceClient<std_srvs::Empty>("ardrone/detecttype",1);
+  toggleCamSrv = ndh_.serviceClient<std_srvs::Empty>("ardrone/togglecam",1);
+  detecttypeSrv = ndh_.serviceClient<std_srvs::Empty>("ardrone/detecttype",1);
 
-ndPause.sleep();//Wait for 2 seconds to prepare publishers & subscribers
-//int i = 1;
+  ndPause.sleep();//Wait for 2 seconds to prepare publishers & subscribers
+  //int i = 1;
 
-while(ros::ok())
-{
-ROS_INFO("Hi from Liu");
-ndPause.sleep();
-/* if(i == 1)
- {
- ROS_INFO("change the detect type");
- detecttypeSrv.call(detect_srvs);
- i =0;
- }*/
+  while(ros::ok())
+  {
+    ROS_INFO("Hi from Liu");
+    ndPause.sleep();
+    /* if(i == 1)
+     {
+     ROS_INFO("change the detect type");
+     detecttypeSrv.call(detect_srvs);
+     i =0;
+     }*/
 
-/* if(i == 1)
- {
- ROS_INFO("toggle the camera");
- toggleCamSrv.call(toggle_srvs);
- i =0;
- }*/
+    /* if(i == 1)
+     {
+     ROS_INFO("toggle the camera");
+     toggleCamSrv.call(toggle_srvs);
+     i =0;
+     }*/
 
-/*
- c_Pi = " ";
- c_Pi = "b";
- s_Pi.data = c_Pi.c_str();
- cmdPub.publish(s_Pi);
- ndPause.sleep();
- ndPause.sleep();
- */
+    /*
+     c_Pi = " ";
+     c_Pi = "b";
+     s_Pi.data = c_Pi.c_str();
+     cmdPub.publish(s_Pi);
+     ndPause.sleep();
+     ndPause.sleep();
+     */
 
-ros::spinOnce();
-}
-return 0;
+    ros::spinOnce();
+  }
+  return 0;
 }
 #endif //end of CLASS_STYLE
 
