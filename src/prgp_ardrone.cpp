@@ -68,7 +68,7 @@ PRGPARDrone::PRGPARDrone()
   //Subscribers
   cmdSub = ndh_.subscribe("piswarm_com", 1, &PRGPARDrone::piswarmCmdRevCb, this);
   tagSub = ndh_.subscribe("/ardrone/navdata", 1, &PRGPARDrone::acquireTagResultCb, this);
-  currentPosSub = ndh_.subscribe("/ardrone/predictedPose", 1, &PRGPARDrone::acquireCurrentPosCb, this);
+  currentStateSub = ndh_.subscribe("/ardrone/predictedPose", 1, &PRGPARDrone::acquireCurrentStateCb, this);
   imgSub = ndh_.subscribe("/ardrone/image_raw", 10, &PRGPARDrone::takePicCb, this);
 
   //Service client
@@ -171,6 +171,7 @@ void PRGPARDrone::takePicCb(const sensor_msgs::ImageConstPtr img)
 /** Callback function for /ardrone/navdata to get the navdata, especially the detection result.
  *  Getting the navdata from the topic and process the data. Then reporting the detection result
  *  for different stages, including the initial stage, flight stage and home stage of the AR.Drone.
+ *  If target tag is detected, stop the flight command and hover the drone.
  */
 void PRGPARDrone::acquireTagResultCb(const ardrone_autonomy::Navdata &navdataReceived)
 {
@@ -197,6 +198,7 @@ void PRGPARDrone::acquireTagResultCb(const ardrone_autonomy::Navdata &navdataRec
     {
       detected_flag = true;/**< The value will be true when AR.Drone detect the target tag during the flight */
       start_flag = false;/**< The value will be true when AR.Drone get the recruiting command from Pi-Swarm */
+      stopCmdAndHover();
     }
     else if (2 == tag_type)
     {
@@ -205,6 +207,7 @@ void PRGPARDrone::acquireTagResultCb(const ardrone_autonomy::Navdata &navdataRec
       {
         detected_flag = true;
         start_flag = false;
+        stopCmdAndHover();
       }
     }
   }
@@ -216,13 +219,18 @@ void PRGPARDrone::acquireTagResultCb(const ardrone_autonomy::Navdata &navdataRec
   }
 }
 
-/** Callback function for /ardrone/predictedPose to get the current position of AR.Drone.
- *  Getting the data from the topic and process it for different requirements.
+/** Callback function for /ardrone/predictedPose to get the current state of AR.Drone.
+ *  Getting the current state from the topic and process it for different requirements.
+ *  If the PTAM is lost, stop the flight command and hover the drone in order to save it.
  */
-void PRGPARDrone::acquireCurrentPosCb(const tum_ardrone::filter_state& currentPos)
+void PRGPARDrone::acquireCurrentStateCb(const tum_ardrone::filter_state &currentState)
 {
-  currentPos_x = currentPos.x;
-  currentPos_y = currentPos.y;
+  currentPos_x = currentState.x;
+  currentPos_y = currentState.y;
+  if (currentState.ptamState == currentState.PTAM_LOST)
+  {
+    stopCmdAndHover();
+  }
 }
 
 /** Sending the command to the Pi-Swarm by the topic piswarm_com.

@@ -97,7 +97,7 @@ private:
   //Subscribers
   ros::Subscriber cmdSub; /**< Subscriber to get the command from Pi-Swarm by piswarm_com */
   ros::Subscriber tagSub; /**< Subscriber to get the navdata, especially the tag result by /ardrone/navdata */
-  ros::Subscriber currentPosSub; /**< Subscriber to get the current position of the AR.Drone */
+  ros::Subscriber currentStateSub; /**< Subscriber to get the current state of the AR.Drone */
   ros::Subscriber imgSub; /**< Subscriber to get the image from camera by /ardrone/image_raw */
 
   //Rob#
@@ -164,7 +164,7 @@ public:
   void piswarmCmdRevCb(const std_msgs::StringConstPtr str);
   void takePicCb(const sensor_msgs::ImageConstPtr img);
   void acquireTagResultCb(const ardrone_autonomy::Navdata &navdataReceived);
-  void acquireCurrentPosCb(const tum_ardrone::filter_state& currentPos);
+  void acquireCurrentStateCb(const tum_ardrone::filter_state &currentState);
 
   //functions
   void sendCmdToPiswarm();
