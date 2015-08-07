@@ -175,7 +175,7 @@ void PRGPARDrone::takePicCb(const sensor_msgs::ImageConstPtr img)
 void PRGPARDrone::acquireTagResultCb(const ardrone_autonomy::Navdata &navdataReceived)
 {
   altitude = navdataReceived.altd / 1000.0;
-  if (navdataReceived.tags_count > 0)
+  if (navdataReceived.tags_count > 0)   ///sy tag(s) in sight
   {
     navdataReceived.tags_type[0];
     tag_x_coord = navdataReceived.tags_xc[0];
@@ -185,18 +185,18 @@ void PRGPARDrone::acquireTagResultCb(const ardrone_autonomy::Navdata &navdataRec
     navdataReceived.tags_xc[1];
     navdataReceived.tags_yc[1];
 
-    if (init_tag_det == true)
+    if (init_tag_det == true)/**< The value will be true to activate the tag detection at the initial stage of AR.Drone */ //Rob# Is this the target tag? Maybe use target_tag or ttag distinguish
     {
-      init_detected_flag = true;
+      init_detected_flag = true;/**< The value will be true when tag detected at the initial stage */
     }
-    else if (home_tag_det == true)
+    else if (home_tag_det == true)/**< The value will be true to activate the tag detection at the home stage of AR.Drone */
     {
-      home_detected_flag = true;
+      home_detected_flag = true;/**< The value will be true when tag detected at home stage */
     }
-    else if (tag_type < 2)
+    else if (tag_type < 2)/**< 0 for black_roundel, 1 for COCARDE, 2 for mixed tag type (current_tag is 0) */
     {
-      detected_flag = true;
-      start_flag = false;
+      detected_flag = true;/**< The value will be true when AR.Drone detect the target tag during the flight */
+      start_flag = false;/**< The value will be true when AR.Drone get the recruiting command from Pi-Swarm */
     }
     else if (2 == tag_type)
     {
