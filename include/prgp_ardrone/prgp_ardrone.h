@@ -138,13 +138,15 @@ private:
   bool home_detected_flag; /**< The value will be true when tag detected at home stage */
   bool executing_command_flag; //Rob# /**< this value will be true whilst the drone is executing a tum command, it will be set to false after a callback */
   uint16_t current_tag; /**< change when setTargetTag() is used, 0 for black_roundel, 1 for COCARDE */
-  uint16_t tag_type; /**< 0 for black_roundel, 1 for COCARDE, 2 for mixed tag type (current_tag is 0) */
+  uint16_t target_tag; /**< 0 for black_roundel, 1 for COCARDE, 2 for mixed tag type (current_tag is 0) */
   bool reference_set;
   //Rob#
   float altitude;
-  uint32_t tag_x_coord = 0;
-  uint32_t tag_y_coord = 0;
-  float tag_orient = 0;
+  uint32_t tag_x_coord;
+  uint32_t tag_y_coord;
+  float tag_orient;
+  ///sy
+  bool home;
 
   typedef struct drone_pose
   {

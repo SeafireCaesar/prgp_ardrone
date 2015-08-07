@@ -88,10 +88,13 @@ PRGPARDrone::PRGPARDrone()
   home_tag_det = false;
   executing_command_flag = false;
   current_tag = 0;
-  tag_type = 0;
+  target_tag = 0;
   altitude = 0;
   reference_set = false;
-
+  tag_x_coord = 0;
+  tag_y_coord = 0;
+  tag_orient = 0;
+  home = true;
 }
 
 PRGPARDrone::~PRGPARDrone(void)
@@ -109,31 +112,34 @@ void PRGPARDrone::piswarmCmdRevCb(const std_msgs::StringConstPtr str)
 
   ROS_INFO_STREAM(*str);
   ROS_INFO("%s\n", str->data.c_str());
-  std::string k = str->data.substr(0, 1);
-  ROS_INFO("%s\n", k.c_str());
+  char k = str->data.substr(0, 1);
+//  ROS_INFO("%s\n", k.c_str());
   if (str->data.c_str() == "r")
   {
     //default is used the black_roundel tag
     start_flag = true;
-    tag_type = 0;
+    target_tag = 0;
   }
   else if (str->data.c_str() == "c")
   {
     setTargetTag(); //change to COCARDE tag
     start_flag = true;
-    tag_type = 1;
+    target_tag = 1;
   }
   else if (str->data.c_str() == "m")
   {
     //mix tag, two black_roundel together, need not change the tag
     start_flag = true;
-    tag_type = 2;
+    target_tag = 2;
+  }
+  else
+  {
+    ///sy error
   }
 }
 
-/** Callback function for the /ardrone/image_raw topic to get the image from camera.
- *  When picture_flag become true, this function will start the taking picture function
- *  which get the image from the topic and process the image.
+/** Callback function for taking a picture for target tag (ground robot) and beacon.
+ *  When the target tag is detected and centred, the callback function will save the image from topic /ardrone/image_raw.
  */
 void PRGPARDrone::takePicCb(const sensor_msgs::ImageConstPtr img)
 {
@@ -176,47 +182,121 @@ void PRGPARDrone::takePicCb(const sensor_msgs::ImageConstPtr img)
 void PRGPARDrone::acquireTagResultCb(const ardrone_autonomy::Navdata &navdataReceived)
 {
   altitude = navdataReceived.altd / 1000.0;
-  if (navdataReceived.tags_count > 0)   ///sy tag(s) in sight
+  if (navdataReceived.tags_count > 0) ///sy how many types could be detected? if one at a time why not determine the target tag type before?
   {
-    navdataReceived.tags_type[0];
-    tag_x_coord = navdataReceived.tags_xc[0];
-    tag_y_coord = navdataReceived.tags_yc[0];
-    tag_orient = navdataReceived.tags_orientation[0];
-    navdataReceived.tags_type[1];
-    navdataReceived.tags_xc[1];
-    navdataReceived.tags_yc[1];
-
-    if (init_tag_det == true)/**< The value will be true to activate the tag detection at the initial stage of AR.Drone */ //Rob# Is this the target tag? Maybe use target_tag or ttag distinguish
+    if (home) ///sy TODO make sure there is only one tag in home area
     {
-      init_detected_flag = true;/**< The value will be true when tag detected at the initial stage */
+      detected_flag = true;
+      tag_x_coord = navdataReceived.tags_xc[0];
+      tag_y_coord = navdataReceived.tags_yc[0];
+      tag_orient = navdataReceived.tags_orientation[0];
     }
-    else if (home_tag_det == true)/**< The value will be true to activate the tag detection at the home stage of AR.Drone */
+    else ///sy outside home, or searching for target tag
     {
-      home_detected_flag = true;/**< The value will be true when tag detected at home stage */
-    }
-    else if (tag_type < 2)/**< 0 for black_roundel, 1 for COCARDE, 2 for mixed tag type (current_tag is 0) */
-    {
-      detected_flag = true;/**< The value will be true when AR.Drone detect the target tag during the flight */
-      start_flag = false;/**< The value will be true when AR.Drone get the recruiting command from Pi-Swarm */
-      stopCmdAndHover();
-    }
-    else if (2 == tag_type)
-    {
-      if ((navdataReceived.tags_count == 2)
-          && (fabs(navdataReceived.tags_orientation[0] - navdataReceived.tags_orientation[0]) < 20))
+      uint8_t i = 0, j = 0; ///sy check number of target tag(s)
+      uint8_t count = 0;
+      switch (target_tag)
       {
-        detected_flag = true;
-        start_flag = false;
-        stopCmdAndHover();
+        case 0:
+        case 1:
+          for (i = 0; i < navdataReceived.tags_count; i++)
+          {
+            if (navdataReceived.tags_type[i] == target_tag) ///sy TODO check the output of tags_type and target_tag
+            {
+              count++;
+              j = i;        ///sy record the last target_tag in the array
+            }
+          }
+          if (count == 1)
+          {
+            detected_flag = true;
+            tag_x_coord = navdataReceived.tags_xc[j];
+            tag_y_coord = navdataReceived.tags_yc[j];
+            tag_orient = navdataReceived.tags_orientation[j];
+          }
+          else
+          {
+            detected_flag = false;
+          }
+          break;
+        case 2: ///sy combination tag with single black_roundel in one img?
+          for (i = 0; i < navdataReceived.tags_count; i++)
+          {
+            if (navdataReceived.tags_type[i] == target_tag) ///sy TODO check the output of tags_type and target_tag
+            {
+              count++;
+              j = i;        ///sy record the last target_tag in the array
+            }
+          }
+          if (count == 2) ///sy inaccurate way to get the tag info
+          {
+            detected_flag = true;
+            tag_x_coord = navdataReceived.tags_xc[j];
+            tag_y_coord = navdataReceived.tags_yc[j];
+            tag_orient = navdataReceived.tags_orientation[j];
+          }
+          else
+          {
+            detected_flag = false;
+          }
+          break;
+        default:
+          break;
       }
     }
   }
   else
   {
-    init_detected_flag = false;
-    home_detected_flag = false;
-    detected_flag = false;
+
   }
+//  if (navdataReceived.tags_count > 0) ///sy tag(s) in sight, TODO tag_number
+//  {
+////    navdataReceived.tags_type[0];
+//    tag_x_coord = navdataReceived.tags_xc[0]; ///sy TODO when no tag is detected, what should the values be?
+//    tag_y_coord = navdataReceived.tags_yc[0];
+//    tag_orient = navdataReceived.tags_orientation[0];
+////    navdataReceived.tags_type[1];
+////    navdataReceived.tags_xc[1];
+////    navdataReceived.tags_yc[1];
+//
+//    if (init_tag_det == true)/**< The value will be true to activate the tag detection at the initial stage of AR.Drone */ //Rob# Is this the target tag? Maybe use target_tag or ttag distinguish
+//    {
+//      init_detected_flag = true;/**< The value will be true when tag detected at the initial stage */
+//    }
+//    else if (home_tag_det == true)/**< The value will be true to activate the tag detection at the home stage of AR.Drone */
+//    {
+//      home_detected_flag = true;/**< The value will be true when tag detected at home stage */
+//    }
+//    else /**< 0 for black_roundel, 1 for COCARDE, 2 for mixed tag type (current_tag is 0) */
+//    {
+//      switch (target_tag)
+//      {
+//        case 0:
+//        case 1:
+//          detected_flag = true;/**< The value will be true when AR.Drone detect the target tag during the flight */
+//          start_flag = false;/**< The value will be true when AR.Drone get the recruiting command from Pi-Swarm */
+//          stopCmdAndHover();
+//          break;
+//        case 2:
+//          if ((navdataReceived.tags_count == 2)
+//              && (fabs(navdataReceived.tags_orientation[0] - navdataReceived.tags_orientation[0]) < 20))
+//          {
+//            detected_flag = true;
+//            start_flag = false;
+//            stopCmdAndHover();
+//          }
+//          break;
+//        default:
+//          break;
+//      }
+//    }
+//  }
+//  else
+//  {
+//    init_detected_flag = false;
+//    home_detected_flag = false;
+//    detected_flag = false; ///sy TODO if the detection is unstable, detected flag will be unreliable
+//  }
 }
 
 /** Callback function for /ardrone/predictedPose to get the current state of AR.Drone.
@@ -227,6 +307,11 @@ void PRGPARDrone::acquireCurrentStateCb(const tum_ardrone::filter_state &current
 {
   currentPos_x = currentState.x;
   currentPos_y = currentState.y;
+  ///sy home flag determination
+  if (currentPos_x > 3 && currentPos_y > 3)
+    home = false;
+  else
+    home = true;
   if (currentState.ptamState == currentState.PTAM_LOST)
   {
     stopCmdAndHover();
@@ -605,7 +690,8 @@ void PRGPARDrone::run()
 
   if (ros::ok())
   {
-//while(1)
+    while (1)
+      ros::spinOnce();
 // ROS_DEBUG("aaaa");
     initARDrone();
 
