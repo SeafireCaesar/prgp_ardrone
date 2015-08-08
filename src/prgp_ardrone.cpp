@@ -205,7 +205,7 @@ void PRGPARDrone::acquireTagResultCb(const ardrone_autonomy::Navdata &navdataRec
             if (navdataReceived.tags_type[i] == target_tag) ///sy TODO check the output of tags_type and target_tag
             {
               count++;
-              j = i;        ///sy record the last target_tag in the array
+              j = i; ///sy record the last target_tag in the array
             }
           }
           if (count == 1)
@@ -226,7 +226,7 @@ void PRGPARDrone::acquireTagResultCb(const ardrone_autonomy::Navdata &navdataRec
             if (navdataReceived.tags_type[i] == target_tag) ///sy TODO check the output of tags_type and target_tag
             {
               count++;
-              j = i;        ///sy record the last target_tag in the array
+              j = i; ///sy record the last target_tag in the array
             }
           }
           if (count == 2) ///sy inaccurate way to get the tag info
@@ -316,7 +316,7 @@ void PRGPARDrone::acquireCurrentStateCb(const tum_ardrone::filter_state &current
   if (fabs(currentPos_x) > 3 && fabs(currentPos_y) > 3)
   {
     home = false;
-    if(fabs(currentPos_x - FINAL_X) < 1 && fabs(currentPos_x - FINAL_X) < 1) ///sy should the threshold too vague to determine, add covered path to the end
+    if (fabs(currentPos_x - FINAL_X) < 1 && fabs(currentPos_x - FINAL_X) < 1) ///sy should the threshold too vague to determine, add covered path to the end
       search_finished = true;
   }
   else
@@ -528,24 +528,24 @@ void PRGPARDrone::searchForTargetTag()
 {
 #undef NUM_OF_POINTS
 #define NUM_OF_POINTS 1
-  double search_path[NUM_OF_POINTS][4] ={0};
+  double search_path[NUM_OF_POINTS][4] = {0};
   uint32_t i;
-  for(i = 0; i < NUM_OF_POINTS; i++)
+  for (i = 0; i < NUM_OF_POINTS; i++)
     moveToPose(search_path[i][0], search_path[i][1], search_path[i][2], search_path[i][3]);
-  while(!detected_flag && !search_finished)
+  while (!detected_flag && !search_finished)
     ros::spinOnce(); ///sy TODO search_finished flag
-  if(detected_flag)
+  if (detected_flag)
   {
-    stopCmdAndHover();  ///sy stop here instead of in the detect function?
+    stopCmdAndHover(); ///sy stop here instead of in the detect function?
 //    search_finished = true;
   }
-  else if(search_finished)
+  else if (search_finished)
   {
     ROS_INFO("Search failed!");
   }
-/* TODO
- *  centreOnTag();
- */
+  /* TODO
+   *  centreOnTag();
+   */
 }
 
 //  double x;
