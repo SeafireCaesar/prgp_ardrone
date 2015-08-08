@@ -95,6 +95,7 @@ PRGPARDrone::PRGPARDrone()
   tag_y_coord = 0;
   tag_orient = 0;
   home = true;
+  search_finished = false;
 }
 
 PRGPARDrone::~PRGPARDrone(void)
@@ -112,7 +113,7 @@ void PRGPARDrone::piswarmCmdRevCb(const std_msgs::StringConstPtr str)
 
   ROS_INFO_STREAM(*str);
   ROS_INFO("%s\n", str->data.c_str());
-  char k = str->data.substr(0, 1);
+//  std::string k = str->data.substr(0, 1);
 //  ROS_INFO("%s\n", k.c_str());
   if (str->data.c_str() == "r")
   {
@@ -247,7 +248,7 @@ void PRGPARDrone::acquireTagResultCb(const ardrone_autonomy::Navdata &navdataRec
   }
   else
   {
-
+    detected_flag = false;
   }
 //  if (navdataReceived.tags_count > 0) ///sy tag(s) in sight, TODO tag_number
 //  {
@@ -308,12 +309,21 @@ void PRGPARDrone::acquireCurrentStateCb(const tum_ardrone::filter_state &current
   currentPos_x = currentState.x;
   currentPos_y = currentState.y;
   ///sy home flag determination
-  if (currentPos_x > 3 && currentPos_y > 3)
+#undef FINAL_X
+#undef FINAL_Y
+#define FINAL_X 100 ///sy TODO discuss the search finished check method
+#define FINAL_Y 100
+  if (fabs(currentPos_x) > 3 && fabs(currentPos_y) > 3)
+  {
     home = false;
+    if(fabs(currentPos_x - FINAL_X) < 1 && fabs(currentPos_x - FINAL_X) < 1) ///sy should the threshold too vague to determine, add covered path to the end
+      search_finished = true;
+  }
   else
     home = true;
   if (currentState.ptamState == currentState.PTAM_LOST)
   {
+    ROS_INFO("PTAM lost, stopping the drone");
     stopCmdAndHover();
   }
 }
@@ -514,47 +524,69 @@ bool PRGPARDrone::initARDrone()
 /** Flight and searching the target tag.
  *  Sending the flight commands to control the flight.
  */ //Rob# This function name is also a little unclear. SearchForTargetTag
-void PRGPARDrone::flightToSearchTag()
+void PRGPARDrone::searchForTargetTag()
 {
-  double x;
-  double y;
-  double z;
-  double yaw;
-
-  //record the home position
-
-  //set a point, so the drone can first go out the gantry.
-//  sendFlightCmd("c goto -0.25 -0.25 0.25 0");
-
-  //record the gantry point position for return home
-
-  //start searching with a search plan
-//  c = " ";
-//  sprintf(&c[0],"c goto %.2f %.2f %.2f %.2f", x,y,z,yaw); ///sy wrong way for std::string
-//  sendFlightCmd(c);
-
-//  ndPause.sleep();
-  /* commmands can be used
-
-   "c commandstring"
-   autoInit [int moveTimeMS] [int waitTimeMS] [int riseTimeMs] [float initSpeed]
-   autoTakeover [int moveTimeMS] [int waitTimeMS] [int riseTimeMs] [float initSpeed]
-   takeoff
-   start
-   setReference [doube x] [double y] [double z] [double yaw]
-   setReference $POSE$
-   setMaxControl [double cap = 1.0]
-   setInitialReachDist [double dist = 0.2]
-   setStayWithinDist [double dist = 0.5]
-   setStayTime [double seconds = 2.0]
-   lockScaleFP
-   clearCommands
-   goto [double x] [double y] [double z] [double yaw]
-   moveBy [double x] [double y] [double z] [double yaw]
-   moveByRel [double x] [double y] [double z] [double yaw]
-   land
-   */
+#undef NUM_OF_POINTS
+#define NUM_OF_POINTS 1
+  double search_path[NUM_OF_POINTS][4] ={0};
+  uint32_t i;
+  for(i = 0; i < NUM_OF_POINTS; i++)
+    moveToPose(search_path[i][0], search_path[i][1], search_path[i][2], search_path[i][3]);
+  while(!detected_flag && !search_finished)
+    ros::spinOnce(); ///sy TODO search_finished flag
+  if(detected_flag)
+  {
+    stopCmdAndHover();  ///sy stop here instead of in the detect function?
+//    search_finished = true;
+  }
+  else if(search_finished)
+  {
+    ROS_INFO("Search failed!");
+  }
+/* TODO
+ *  centreOnTag();
+ */
 }
+
+//  double x;
+//  double y;
+//  double z;
+//  double yaw;
+//
+//  //record the home position
+//
+//  //set a point, so the drone can first go out the gantry.
+////  sendFlightCmd("c goto -0.25 -0.25 0.25 0");
+//
+//  //record the gantry point position for return home
+//
+//  //start searching with a search plan
+////  c = " ";
+////  sprintf(&c[0],"c goto %.2f %.2f %.2f %.2f", x,y,z,yaw); ///sy wrong way for std::string
+////  sendFlightCmd(c);
+//
+////  ndPause.sleep();
+//  /* commmands can be used
+//
+//   "c commandstring"
+//   autoInit [int moveTimeMS] [int waitTimeMS] [int riseTimeMs] [float initSpeed]
+//   autoTakeover [int moveTimeMS] [int waitTimeMS] [int riseTimeMs] [float initSpeed]
+//   takeoff
+//   start
+//   setReference [doube x] [double y] [double z] [double yaw]
+//   setReference $POSE$
+//   setMaxControl [double cap = 1.0]
+//   setInitialReachDist [double dist = 0.2]
+//   setStayWithinDist [double dist = 0.5]
+//   setStayTime [double seconds = 2.0]
+//   lockScaleFP
+//   clearCommands
+//   goto [double x] [double y] [double z] [double yaw]
+//   moveBy [double x] [double y] [double z] [double yaw]
+//   moveByRel [double x] [double y] [double z] [double yaw]
+//   land
+//   */
+//}
 
 /** Centering the target tag when the target tag is detected.
  *
@@ -632,7 +664,7 @@ void PRGPARDrone::flightToTarget()
 //}
 //else if (detected_flag == false)
 //{
-//flightToSearchTag();
+//searchForTargetTag();
 //}
 
 }

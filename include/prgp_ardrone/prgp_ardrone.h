@@ -147,6 +147,7 @@ private:
   float tag_orient;
   ///sy
   bool home;
+  bool search_finished;
 
   typedef struct drone_pose
   {
@@ -178,7 +179,7 @@ public:
   void setTargetTag();
   bool initARDrone();
   bool centeringTag(double current_height);
-  void flightToSearchTag();
+  void searchForTargetTag();
   void flightToTarget();
   void flightToHome();
   void moveToPose(double x, double y, double z, double yaw);
