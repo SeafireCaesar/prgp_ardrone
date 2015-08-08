@@ -135,7 +135,7 @@ void PRGPARDrone::piswarmCmdRevCb(const std_msgs::StringConstPtr str)
   }
   else
   {
-    ///sy error
+    ///sy error or send to piswarm
   }
 }
 
@@ -144,10 +144,9 @@ void PRGPARDrone::piswarmCmdRevCb(const std_msgs::StringConstPtr str)
  */
 void PRGPARDrone::takePicCb(const sensor_msgs::ImageConstPtr img)
 {
-  static bool pic_flag = true; ///sy TODO change to property
-  if (pic_flag)
+  if (picture_flag)
   {
-    pic_flag = false;
+    picture_flag = false;
     std::fstream image;
     CVD::Image<CVD::byte> new_image;
     cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::MONO8);
@@ -155,7 +154,7 @@ void PRGPARDrone::takePicCb(const sensor_msgs::ImageConstPtr img)
     if (new_image.size().x != img->width || new_image.size().y != img->height)
       new_image.resize(CVD::ImageRef(img->width, img->height));
     memcpy(new_image.data(), cv_ptr->image.data, img->width * img->height); ///sy cpy the image to mimFrameBW.data()
-      ///sy if mutex is necessary? for the new img msg and reading current one, especially img is a ptr
+    ///sy if mutex is necessary? for the new img msg and reading current one, especially img is a ptr
     image.open("output.bmp", std::fstream::out);
     std::cout << "****************** Printing Image ******************" << std::endl;
     CVD::img_save(new_image, image, CVD::ImageType::BMP);
@@ -298,15 +297,15 @@ void PRGPARDrone::acquireCurrentStateCb(const tum_ardrone::filter_state &current
   currentPos_x = currentState.x;
   currentPos_y = currentState.y;
   ///sy home flag determination
-#undef FINAL_X
-#undef FINAL_Y
-#define FINAL_X 100 ///sy TODO discuss the search finished check method
-#define FINAL_Y 100
+//#undef FINAL_X
+//#undef FINAL_Y
+//#define FINAL_X 100 ///sy TODO discuss the search finished check method
+//#define FINAL_Y 100
   if (fabs(currentPos_x) > 3 && fabs(currentPos_y) > 3)
   {
     home = false;
-    if (fabs(currentPos_x - FINAL_X) < 1 && fabs(currentPos_x - FINAL_X) < 1) ///sy should the threshold too vague to determine, add covered path to the end
-      search_finished = true;
+//    if (fabs(currentPos_x - FINAL_X) < 1 && fabs(currentPos_x - FINAL_X) < 1) ///sy should the threshold too vague to determine, add covered path to the end
+//      search_finished = true;
   }
   else
     home = true;
@@ -333,7 +332,7 @@ void PRGPARDrone::sendCmdToPiswarm()
 /** Sending the command directly to the ardrone_autonomy package by cmd_vel topic.
  *  Sending the command to control the yaw, gaz, pitch, roll and other paramaters.
  */
-void PRGPARDrone::sendVelCmd()
+void PRGPARDrone::sendVelCmd() ///sy TODO not used
 {
   velCmd.angular.z = 0; // -cmd.yaw;
   velCmd.linear.z = 0; //cmd.gaz;
@@ -345,7 +344,7 @@ void PRGPARDrone::sendVelCmd()
 
 /** Sending the takeoff command directly to the ardrone_autonomy package.
  */
-void PRGPARDrone::takeOff()
+void PRGPARDrone::takeOff() ///sy TODO not used
 {
   takeoffPub.publish(std_msgs::Empty());
   ROS_INFO("Takeoff");
@@ -370,7 +369,7 @@ void PRGPARDrone::sendFlightCmd(std::string c)
   drone_pub.publish(s);
   pthread_mutex_unlock(&send_CS);
   ROS_INFO("%s", c.c_str());
-  std::cout << "*******************" << s << std::endl;
+  std::cout << "*******************" << s << std::endl; ///sy TODO delete the printing
 }
 
 /** Moving ARDrone to a certain pose.
@@ -426,7 +425,7 @@ void PRGPARDrone::setTargetTag()
 {
   detecttypeSrv.call(detect_srvs);
   ROS_INFO("change the detect type");
-  current_tag = (current_tag + 1) % 2;
+  current_tag = (current_tag + 1) % 2; ///sy TODO print out the current tag for debugging
 }
 
 /** Initialise the ARDrone when it starts.
@@ -509,32 +508,30 @@ bool PRGPARDrone::initARDrone()
     return false;
   }
 }
-
 /** Flight and searching the target tag.
  *  Sending the flight commands to control the flight.
  */ //Rob# This function name is also a little unclear. SearchForTargetTag
 void PRGPARDrone::searchForTargetTag()
 {
-#undef NUM_OF_POINTS
-#define NUM_OF_POINTS 1
-  double search_path[NUM_OF_POINTS][4] = {0};
+  uint32_t num_of_points = 1;
+  double search_path[num_of_points][4] = {0};
   uint32_t i;
-  for (i = 0; i < NUM_OF_POINTS; i++)
+  for (i = 0; i < num_of_points; i++)
     moveToPose(search_path[i][0], search_path[i][1], search_path[i][2], search_path[i][3]);
   while (!detected_flag && !search_finished)
     ros::spinOnce(); ///sy TODO search_finished flag
   if (detected_flag)
   {
-    stopCmdAndHover(); ///sy stop here instead of in the detect function?
+    stopCmdAndHover(); ///sy stop here instead of in the detect function? detected_flag remains true but might not have target tag in sight
 //    search_finished = true;
+    /* TODO
+     *  centreOnTag();
+     */
   }
   else if (search_finished)
   {
     ROS_INFO("Search failed!");
   }
-  /* TODO
-   *  centreOnTag();
-   */
 }
 
 //  double x;
@@ -617,6 +614,10 @@ bool PRGPARDrone::centeringTag(double current_height)
         ndPause.sleep();
         ndPause.sleep();
         ros::spinOnce();
+        /*  ///sy TODO subtituting sleep()
+         * while (fabs(current_x - dest_x) < 0.1)
+         *   ros::spinOnce();
+         */
       }
     }
 
@@ -641,7 +642,7 @@ bool PRGPARDrone::centeringTag(double current_height)
 /** Fly to the target when the target tag is not detected.
  *  Firstly, initialise the AR.Drone and then send the commands to control the flight.
  */
-void PRGPARDrone::flightToTarget()
+void PRGPARDrone::flightToTarget() ///sy TODO not used
 {
 //if (initialising_PTAM_flag == true)
 //{
@@ -663,7 +664,16 @@ void PRGPARDrone::flightToTarget()
  */
 void PRGPARDrone::flightToHome()
 {
-
+  uint32_t num_of_points = 1;
+  double search_path[num_of_points][4] = {0};
+  uint32_t i;
+  for (i = 0; i < num_of_points; i++)
+    moveToPose(search_path[i][0], search_path[i][1], search_path[i][2], search_path[i][3]);
+  ///sy TODO how can the function make sure the drone's arrived
+  /*
+   *     ///sy TODO centring on tag
+   */
+}
 //  double x;
 //  double y;
 //  double z;
@@ -696,8 +706,8 @@ void PRGPARDrone::flightToHome()
 //  //for emergency, use fuction land() to land the ardrone directly;
 //  sendFlightCmd("c land");
 //
-
-}
+//
+//}
 
 /** The main running loop for the prgp_ardrone package.
  *  Getting the command from Pi-Swarm to start the AR.Drone. Then flight to the target. centering
@@ -713,108 +723,19 @@ void PRGPARDrone::run()
   {
     while (1)
       ros::spinOnce();
-// ROS_DEBUG("aaaa");
     initARDrone();
-
-//    std::string commandArray2[22] = {"c goto 0.0 -0.75 0.0 0.0", //1
-//        "c goto 0.0 -1.5 0.0 0.0", //2
-//        "c goto -0.75 -1.5 0.0 0.0", //3
-//        "c goto -0.75 -0.75 0.0 0.0", //4
-//        "c goto -1.5 -0.75 0.0 0.0", //5
-//        "c goto -1.5 0.0 0.0 0.0", //6
-//        "c goto -1.5 0.75 0.0 0.0", //7
-//        "c goto -1.5 1.5 0.0 0.0", //8
-//        "c goto -0.75 1.5 0.0 0.0", //9
-//        "c goto 0.0 1.5 0.0 0.0", //10
-//        "c goto 0.75 1.5 0.0 0.0", //11
-//        "c goto 1.5 1.5 0.0 0.0", //12
-//        "c goto 1.5 0.75 0.0 0.0", //13
-//        "c goto 1.5 0.0 0.0 0.0", //14
-//        "c goto 1.5 -0.75 0.0 0.0", //15
-//        "c goto 1.5 -1.5 0.0 0.0", //16
-//        "c goto 0.75 -1.5 0.0 0.0", //17
-//        "c goto 0.0 -1.5 0.0 0.0", //18
-//        "c goto 0.75 0.0 0.0 0.0", //19
-//        "c goto 0.0 0.75 0.0 0.0", //20
-//        "c goto -0.75 0.0 0.0 0.0", //21
-//        "c goto 0.0 0.0 0.0 0.0" //22
-//        };
-//
-//    i = 0;
-//    while (reference_set == true && i < 22)
-//    {
-//      sendFlightCmd(commandArray2[i]);
-//      ndPause.sleep();
-//      ros::spinOnce();
-//      i++;
-//    }
-    ndPause.sleep();
-    ndPause.sleep();
-    ndPause.sleep();
-    ndPause.sleep();
-    ndPause.sleep();
-    ndPause.sleep();
-    sendFlightCmd("c land");
-    ndPause.sleep();
-    ndPause.sleep();
-    ndPause.sleep();
-    ndPause.sleep();
-    ndPause.sleep();
-    ndPause.sleep();
-//      std::cout << "**** executing_command_flag" << executing_command_flag << " after command sent" << std::endl;
-//      ros::spinOnce();
-//      std::cout << "**** executing_command_flag" << executing_command_flag << " after spinOnce" << std::endl;
-//      executing_command_flag = true;
-//      std::cout << "**** executing_command_flag" << executing_command_flag << " after reset" << std::endl;
-
+    searchForTargetTag(); ///sy exit till centred or search failed
+    toggleCam();
+    ros::spinOnce(); ///sy TODO discuss ros::spinOnce();
+    picture_flag = true;
+    ros::spinOnce(); ///sy takePicCb
+    sendCmdToPiswarm(); ///sy piswarm back
+    toggleCam();
+    ros::spinOnce();
+    flightToHome(); ///sy TODO make sure method returns only when it's home
+    land(); ///sy TODO "c land"?
   }
-
-//    while(executing_command_flag == true)
-//    {
-//      ROS_INFO("Initialising");
-//      ros::spinOnce();
-//    }
-//
-//    ROS_INFO("Initcomplete");
-//    c = "c land";
-//    sendFlightCmd();
-//    ros::spinOnce();
 }
-//  while(ros::ok())
-//  {
-//    ROS_INFO("A new spin begins!");
-//    ndPause.sleep();
-//
-//    /*//for testing
-//     if(picture_flag == false)
-//    {
-//    	toggleCam();
-//    	sendCmdToPiswarm();
-//    }*/
-//    /*
-//    if(start_flag == true){
-//    	flightToTarget();
-//    }
-//    if(detected_flag == true)
-//	{
-//    	centeringTag();
-//	}
-//	if(centering_flag == true)
-//	{
-//	  toggleCam(); //change camera to vertical
-//	  picture_flag = true; //the call back will store and show the picture
-//	}
-//	if(return_flag == true)
-//	{
-//      sendCmdToPiswarm();
-//      flightToHome();
-//	}
-//    //Rob #It might be better to put the spin at the start of the spin.
-//     *
-//     */
-//   ros::spinOnce();
-//  }
-
 /** main function of the prgp_ardrone package.
  *  create the ROS node, define the instance of the PRGPARDrone class. Calling the running loop.
  */
@@ -824,7 +745,7 @@ int main(int argc, char **argv)
   ROS_INFO("Started prgp_ardrone Node. Hi from ARE 2014/15");
 
   PRGPARDrone PRGPARDrone;
-  PRGPARDrone.run();
+  PRGPARDrone.run(); ///sy TODO most of the methods are returning void
 
   return 0;
 }
