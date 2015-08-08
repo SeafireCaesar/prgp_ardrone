@@ -144,34 +144,23 @@ void PRGPARDrone::piswarmCmdRevCb(const std_msgs::StringConstPtr str)
  */
 void PRGPARDrone::takePicCb(const sensor_msgs::ImageConstPtr img)
 {
-
-  std::fstream image;
-  CVD::Image<CVD::byte> new_image;
-  static bool once = true;
-  if (once) ///sy TODO change the flag
+  static bool pic_flag = true; ///sy TODO change to property
+  if (pic_flag)
   {
-    once = false;
+    pic_flag = false;
+    std::fstream image;
+    CVD::Image<CVD::byte> new_image;
     cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::MONO8);
 
     if (new_image.size().x != img->width || new_image.size().y != img->height)
       new_image.resize(CVD::ImageRef(img->width, img->height));
     memcpy(new_image.data(), cv_ptr->image.data, img->width * img->height); ///sy cpy the image to mimFrameBW.data()
-    //    newImageAvailable = true;
-
+      ///sy if mutex is necessary? for the new img msg and reading current one, especially img is a ptr
     image.open("output.bmp", std::fstream::out);
     std::cout << "****************** Printing Image ******************" << std::endl;
     CVD::img_save(new_image, image, CVD::ImageType::BMP);
     std::cout << "****************************************************" << std::endl;
     image.close();
-//    image_saved = true;
-
-    //store;
-    //show;
-//	centering_flag = false;
-//    return_flag = true;
-//    picture_flag = false;
-//    toggleCam(); //change the camera back
-
   }
 }
 
