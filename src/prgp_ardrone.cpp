@@ -46,6 +46,7 @@
 
 #ifdef CLASS_STYLE
 pthread_mutex_t PRGPARDrone::send_CS = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t PRGPARDrone::pic_mt = PTHREAD_MUTEX_INITIALIZER;
 
 /** Initialise the variables and paramaters.
  *  Initialise the ROS time, ROS Duration, Publishers, Subscribers, Service clients, Flags and so on.
@@ -148,17 +149,18 @@ void PRGPARDrone::takePicCb(const sensor_msgs::ImageConstPtr img)
   {
     picture_flag = false;
     std::fstream image;
-    CVD::Image<CVD::byte> new_image;
-    cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::MONO8);
-
+    CVD::Image<CVD::Rgb<CVD::byte> > new_image;
+    cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(img); ///sy using default format
+    pthread_mutex_lock(&pic_mt);
     if (new_image.size().x != img->width || new_image.size().y != img->height)
       new_image.resize(CVD::ImageRef(img->width, img->height));
     memcpy(new_image.data(), cv_ptr->image.data, img->width * img->height); ///sy cpy the image to mimFrameBW.data()
+    pthread_mutex_unlock(&pic_mt);
     ///sy if mutex is necessary? for the new img msg and reading current one, especially img is a ptr
     image.open("output.bmp", std::fstream::out);
-    std::cout << "****************** Printing Image ******************" << std::endl;
     CVD::img_save(new_image, image, CVD::ImageType::BMP);
-    std::cout << "****************************************************" << std::endl;
+    glDrawPixels(new_image);
+    glFlush();
     image.close();
   }
 }
@@ -513,10 +515,11 @@ bool PRGPARDrone::initARDrone()
  */ //Rob# This function name is also a little unclear. SearchForTargetTag
 void PRGPARDrone::searchForTargetTag()
 {
-  uint32_t num_of_points = 1;
-  double search_path[num_of_points][4] = {0};
+#undef NUM_OF_POINTS
+#define NUM_OF_POINTS 1
+  double search_path[NUM_OF_POINTS][4] = {0}; ///sy  variable-sized object ‘search_path’ may not be initialized
   uint32_t i;
-  for (i = 0; i < num_of_points; i++)
+  for (i = 0; i < NUM_OF_POINTS; i++)
     moveToPose(search_path[i][0], search_path[i][1], search_path[i][2], search_path[i][3]);
   while (!detected_flag && !search_finished)
     ros::spinOnce(); ///sy TODO search_finished flag
@@ -664,10 +667,11 @@ void PRGPARDrone::flightToTarget() ///sy TODO not used
  */
 void PRGPARDrone::flightToHome()
 {
-  uint32_t num_of_points = 1;
-  double search_path[num_of_points][4] = {0};
+#undef NUM_OF_POINTS
+#define NUM_OF_POINTS 1
+  double search_path[NUM_OF_POINTS][4] = {0};
   uint32_t i;
-  for (i = 0; i < num_of_points; i++)
+  for (i = 0; i < NUM_OF_POINTS; i++)
     moveToPose(search_path[i][0], search_path[i][1], search_path[i][2], search_path[i][3]);
   ///sy TODO how can the function make sure the drone's arrived
   /*

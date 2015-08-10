@@ -57,7 +57,9 @@
 #include "tum_ardrone/filter_state.h"
 
 ///sy   taking picture headers ########################
-#include "cvd/image_io.h"
+#include <cvd/image_io.h>
+#include <cvd/videodisplay.h>
+#include <cvd/gl_helpers.h>
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
 #include <iostream>
@@ -121,6 +123,7 @@ private:
   geometry_msgs::Twist velCmd; /**< Message for the cmd_vel topic to AR.Drone */
 
   static pthread_mutex_t send_CS;
+  static pthread_mutex_t pic_mt;
 
   //variables
   double currentPos_x;
