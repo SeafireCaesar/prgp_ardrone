@@ -75,7 +75,7 @@ PRGPARDrone::PRGPARDrone()
   //Service client
   toggleCamSrv = ndh_.serviceClient<std_srvs::Empty>("/ardrone/togglecam", 1);
   detecttypeSrv = ndh_.serviceClient<std_srvs::Empty>("/ardrone/detecttype", 1);
-  stopCmdAndHoverSrv = ndh_.serviceClient<std_srvs::Empty>("drone_autopilot/clearCommands",1);
+  stopCmdAndHoverSrv = ndh_.serviceClient<std_srvs::Empty>("drone_autopilot/clearCommands", 1);
 
   //Variables
   start_flag = false;
@@ -356,8 +356,8 @@ bool PRGPARDrone::initARDrone()
   sendFlightCmd("c setInitialReachDist 0.1");
 
   sendFlightCmd("c setStayWithinDist 0.3");
-  // stay 0.2 seconds
-  sendFlightCmd("c setStayTime 1");
+  // stay 1 seconds
+  sendFlightCmd("c setStayTime 1.2");
   //PTAM
   sendFlightCmd("c lockScaleFP");
 
@@ -374,9 +374,10 @@ bool PRGPARDrone::initARDrone()
   moveBy(0.0, 0.0, (DESIRED_HEIGHT - altitude), 0.0);
 
   sendFlightCmd("c setReference $POSE$");
-#define EXTRA_HEIGHT 0.6
+#define EXTRA_HEIGHT 0.5
 
-  moveToPose(0.0, 0.0, EXTRA_HEIGHT, 0);
+ moveToPose(0.0, 0.0, EXTRA_HEIGHT, 0);
+
 
   ndPause.sleep();
   ndPause.sleep();
@@ -384,11 +385,10 @@ bool PRGPARDrone::initARDrone()
 
   ros::spinOnce();
 
-  double command_list[8][4] = { {0, 0.5, EXTRA_HEIGHT, 0}, {0, -0.5, EXTRA_HEIGHT, 0}, {0.5, 0.0, EXTRA_HEIGHT, 0}, {
-      -0.5, 0, EXTRA_HEIGHT, 0},
-                               {0.75, 0.75, EXTRA_HEIGHT, 0}, {0.75, -0.75, EXTRA_HEIGHT, 0}, {-0.75, -0.75,
-                                                                                               EXTRA_HEIGHT, 0},
-                               {-0.75, 0.75, EXTRA_HEIGHT, 0}};
+  double command_list[8][4] = { {0, -0.75, EXTRA_HEIGHT, 0}, {-0.75, -0.75, EXTRA_HEIGHT, 0},
+                               {0.75, 0, EXTRA_HEIGHT, 0}, {0.75, 0.75, EXTRA_HEIGHT, 0}, {0, 0.75, EXTRA_HEIGHT, 0}, {
+                                   -0.75, 0.75, EXTRA_HEIGHT, 0},
+                               {-0.75, 0, EXTRA_HEIGHT, 0}, {-0.75, -0.75, EXTRA_HEIGHT, 0}};
 
   int i = 0;
   while (detected_flag == false && i < 8)
@@ -415,6 +415,7 @@ bool PRGPARDrone::initARDrone()
     sendFlightCmd("c land");
     return false;
   }
+  return true;
 }
 
 /** Flight and searching the target tag.
@@ -495,7 +496,7 @@ bool PRGPARDrone::centeringTag(double current_height)
       }
       else
       {
-        ROS_INFO("x coord is: %d, y coord is: %d",tag_x_coord,tag_y_coord);
+        ROS_INFO("x coord is: %d, y coord is: %d", tag_x_coord, tag_y_coord);
         ROS_INFO("Moving so Tag is at centre");
         moveBy(x_move, y_move, 0.0, angle_to_turn);
         ndPause.sleep();
@@ -505,10 +506,10 @@ bool PRGPARDrone::centeringTag(double current_height)
       }
     }
 
-    if(detected_flag == true)
+    if (detected_flag == true)
     {
       ROS_INFO("Drone centred above Tag");
-          return true;
+      return true;
     }
 
   }
@@ -519,7 +520,7 @@ bool PRGPARDrone::centeringTag(double current_height)
     return false;
   }
   return false;
- //Check if the tag is detected
+  //Check if the tag is detected
 //  centering_flag = true;
 }
 
@@ -592,66 +593,112 @@ void PRGPARDrone::flightToHome()
 void PRGPARDrone::run()
 {
 
-ROS_INFO("Starting running");
+  ROS_INFO("Starting running");
 
-if (ros::ok())
-{
-//while(1)
-// ROS_DEBUG("aaaa");
-initARDrone();
+  if (ros::ok())
+  {
+    //while(1)
+    // ROS_DEBUG("aaaa");
+    initARDrone();
 
-//    std::string commandArray2[22] = {"c goto 0.0 -0.75 0.0 0.0", //1
-//        "c goto 0.0 -1.5 0.0 0.0", //2
-//        "c goto -0.75 -1.5 0.0 0.0", //3
-//        "c goto -0.75 -0.75 0.0 0.0", //4
-//        "c goto -1.5 -0.75 0.0 0.0", //5
-//        "c goto -1.5 0.0 0.0 0.0", //6
-//        "c goto -1.5 0.75 0.0 0.0", //7
-//        "c goto -1.5 1.5 0.0 0.0", //8
-//        "c goto -0.75 1.5 0.0 0.0", //9
-//        "c goto 0.0 1.5 0.0 0.0", //10
-//        "c goto 0.75 1.5 0.0 0.0", //11
-//        "c goto 1.5 1.5 0.0 0.0", //12
-//        "c goto 1.5 0.75 0.0 0.0", //13
-//        "c goto 1.5 0.0 0.0 0.0", //14
-//        "c goto 1.5 -0.75 0.0 0.0", //15
-//        "c goto 1.5 -1.5 0.0 0.0", //16
-//        "c goto 0.75 -1.5 0.0 0.0", //17
-//        "c goto 0.0 -1.5 0.0 0.0", //18
-//        "c goto 0.75 0.0 0.0 0.0", //19
-//        "c goto 0.0 0.75 0.0 0.0", //20
-//        "c goto -0.75 0.0 0.0 0.0", //21
-//        "c goto 0.0 0.0 0.0 0.0" //22
-//        };
-//
-//    i = 0;
-//    while (reference_set == true && i < 22)
-//    {
-//      sendFlightCmd(commandArray2[i]);
-//      ndPause.sleep();
-//      ros::spinOnce();
-//      i++;
-//    }
-ndPause.sleep();
-ndPause.sleep();
-ndPause.sleep();
-ndPause.sleep();
-ndPause.sleep();
-ndPause.sleep();
-sendFlightCmd("c land");
-ndPause.sleep();
-ndPause.sleep();
-ndPause.sleep();
-ndPause.sleep();
-ndPause.sleep();
-ndPause.sleep();
-//      std::cout << "**** executing_command_flag" << executing_command_flag << " after command sent" << std::endl;
-//      ros::spinOnce();
-//      std::cout << "**** executing_command_flag" << executing_command_flag << " after spinOnce" << std::endl;
-//      executing_command_flag = true;
-//      std::cout << "**** executing_command_flag" << executing_command_flag << " after reset" << std::endl;
+    //    std::string commandArray2[22] = {"c goto 0.0 -0.75 0.0 0.0", //1
+    //        "c goto 0.0 -1.5 0.0 0.0", //2
+    //        "c goto -0.75 -1.5 0.0 0.0", //3
+    //        "c goto -0.75 -0.75 0.0 0.0", //4
+    //        "c goto -1.5 -0.75 0.0 0.0", //5
+    //        "c goto -1.5 0.0 0.0 0.0", //6
+    //        "c goto -1.5 0.75 0.0 0.0", //7
+    //        "c goto -1.5 1.5 0.0 0.0", //8
+    //        "c goto -0.75 1.5 0.0 0.0", //9
+    //        "c goto 0.0 1.5 0.0 0.0", //10
+    //        "c goto 0.75 1.5 0.0 0.0", //11
+    //        "c goto 1.5 1.5 0.0 0.0", //12
+    //        "c goto 1.5 0.75 0.0 0.0", //13
+    //        "c goto 1.5 0.0 0.0 0.0", //14
+    //        "c goto 1.5 -0.75 0.0 0.0", //15
+    //        "c goto 1.5 -1.5 0.0 0.0", //16
+    //        "c goto 0.75 -1.5 0.0 0.0", //17
+    //        "c goto 0.0 -1.5 0.0 0.0", //18
+    //        "c goto 0.75 0.0 0.0 0.0", //19
+    //        "c goto 0.0 0.75 0.0 0.0", //20
+    //        "c goto -0.75 0.0 0.0 0.0", //21
+    //        "c goto 0.0 0.0 0.0 0.0" //22
+    //        };
+    //
+    //    i = 0;
+    //    while (reference_set == true && i < 22)
+    //    {
+    //      sendFlightCmd(commandArray2[i]);
+    //      ndPause.sleep();
+    //      ros::spinOnce();
+    //      i++;
+    //    }
 
-}
+   /** double command_list[8][4] = { {0.8, 0, 0, 0}, {0.8, 0, 0, 0},
+                                  {0.8, 0, 0, 0}, {0, -0.81, 0, 0}, {0.8, 0, 0, 0}, {0, 0.81, 0, 0},
+                                  {0, 0.81, 0, 0},{0, 0.81, 0, 0}};
+   */
+
+    //homero
+    double command_list_search[48][4] = { {0.8, 0, 0, 0}, {1.6, 0, 0, 0},
+                                  {2.4, 0, 0, 0}, {2.4, -0.81, 0, 0}, {3.2, -0.81, 0, 0}, {3.2, 0, 0, 0},
+                                  {3.2, 0.81, 0, 0}, {3.2, 1.62, 0, 0}, {3.2, 2.43, 0, 0}, {3.2, 3.24, 0, 0},
+                                  {3.2, 4.05, 0, 0}, {3.2, 4.86, 0, 0}, {3.2, 5.67, 0, 0},
+                                  {4,5.67, 0, 0}, {4,4.86, 0, 0}, {4,4.05, 0, 0},  {4, 3.24, 0, 0},
+                                  {4, 2.43, 0, 0}, {4, 1.62, 0, 0}, {4,0.81, 0, 0}, {4, 0, 0, 0},
+                                  {4, -0.81, 0, 0}, {4.8, -0.81, 0, 0}, {4.8, 0, 0, 0},
+                                  {4.8, 0.81, 0, 0}, {4.8, 1.62, 0, 0}, {4.8, 2.43, 0, 0}, {4.8, 3.24, 0, 0},
+                                  {4.8, 4.05, 0, 0}, {4.8, 4.86, 0, 0}, {4.8, 5.67, 0, 0},
+                                  {5.6,5.67, 0, 0}, {5.6, 4.86, 0, 0}, {5.6,4.05, 0, 0},  {5.6, 3.26, 0, 0},
+                                  {5.6, 2.43, 0, 0}, {5.6, 1.62, 0, 0}, {5.6,0.81, 0, 0}, {5.6, 0, 0, 0},
+                                  {5.6, -0.81, 0, 0}, {5.6, 0, 0, 0}, {4.8, 0, 0, 0}, {4, 0, 0, 0}, {3.2, 0, 0, 0},
+                                  {2.4, 0, 0, 0}, {1.6, 0, 0, 0},{0.8, 0, 0, 0},{0, 0, 0, 0}
+                                };
+    int i = 0;
+    while (i < 48)
+    {
+      moveToPose(command_list_search[i][0], command_list_search[i][1], command_list_search[i][2], command_list_search[i][3]);
+      i++;
+    }
+
+
+
+  /**
+    int i = 0;
+    while (i < 8)
+    {
+      moveToPose(command_list[i][0], command_list[i][1], command_list[i][2], command_list[i][3]);
+      i++;
+    }
+
+   */
+
+   /** while(1){
+      ros::spinOnce();
+      if(detected_flag == true){
+        stopCmdAndHover();
+      }
+    }**/
+
+    ndPause.sleep();
+    ndPause.sleep();
+    ndPause.sleep();
+    ndPause.sleep();
+    ndPause.sleep();
+    sendFlightCmd("c land");
+    ndPause.sleep();
+    ndPause.sleep();
+    ndPause.sleep();
+    ndPause.sleep();
+    ndPause.sleep();
+    ndPause.sleep();
+    //      std::cout << "**** executing_command_flag" << executing_command_flag << " after command sent" << std::endl;
+    //      ros::spinOnce();
+    //      std::cout << "**** executing_command_flag" << executing_command_flag << " after spinOnce" << std::endl;
+    //      executing_command_flag = true;
+    //      std::cout << "**** executing_command_flag" << executing_command_flag << " after reset" << std::endl;
+
+  }
 
 //    while(executing_command_flag == true)
 //    {
@@ -704,13 +751,13 @@ ndPause.sleep();
  */
 int main(int argc, char **argv)
 {
-ros::init(argc, argv, "prgp_ardrone"); //Create node
-ROS_INFO("Started prgp_ardrone Node. Hi from ARE 2014/15");
+  ros::init(argc, argv, "prgp_ardrone"); //Create node
+  ROS_INFO("Started prgp_ardrone Node. Hi from ARE 2014/15");
 
-PRGPARDrone PRGPARDrone;
-PRGPARDrone.run();
+  PRGPARDrone PRGPARDrone;
+  PRGPARDrone.run();
 
-return 0;
+  return 0;
 }
 
 #else
@@ -718,11 +765,11 @@ return 0;
 void piswarmCmdRev(const std_msgs::StringConstPtr str)
 {
 //ROS_INFO("%s",str->data.substr(0,1));
-ROS_INFO_STREAM(*str);
-ROS_INFO("%s\n",str->data.c_str());
+  ROS_INFO_STREAM(*str);
+  ROS_INFO("%s\n",str->data.c_str());
 //ROS_INFO("%s\n",str->data.substr(0,2));
-std::string k = str->data.substr(0,1);
-ROS_INFO("%s\n",k.c_str());
+  std::string k = str->data.substr(0,1);
+  ROS_INFO("%s\n",k.c_str());
 }
 
 void takePic(const sensor_msgs::ImageConstPtr img)
@@ -733,11 +780,11 @@ void takePic(const sensor_msgs::ImageConstPtr img)
 
 void tagResult(const ardrone_autonomy::Navdata &navdataReceived)
 {
-if(navdataReceived.tags_count > 0)
-{
+  if(navdataReceived.tags_count > 0)
+  {
 //Send confirmation to piswarm, use publish
-tag_detected = true;
-}
+    tag_detected = true;
+  }
 }
 int * a;
 int x = 5;
@@ -751,8 +798,8 @@ print(*a) -> 5
  */
 void currentPos(const tum_ardrone::filter_state& currentPos)
 {
-currentPos_x = currentPos.x;
-currentPos_y = currentPos.y;
+  currentPos_x = currentPos.x;
+  currentPos_y = currentPos.y;
 }
 
 /**
@@ -760,78 +807,78 @@ currentPos_y = currentPos.y;
  */
 int main(int argc, char **argv)
 {
-ros::init(argc, argv, "prgp_ardrone"); //Create node
-ros::NodeHandle ndh_;
-ros::Duration ndPause;
+  ros::init(argc, argv, "prgp_ardrone"); //Create node
+  ros::NodeHandle ndh_;
+  ros::Duration ndPause;
 
 //Publishers
-ros::Publisher landPub;//send landing commands
-ros::Publisher takeoffPub;//send takeoff commands
-ros::Publisher drone_pub;//send commands to AR.Drone
-ros::Publisher cmdPub;//To sen cnd to PiSwarm
-ros::Publisher velPub;//send cmd directly to cmd_vel topic of the ardrone_autonomy
+  ros::Publisher landPub;//send landing commands
+  ros::Publisher takeoffPub;//send takeoff commands
+  ros::Publisher drone_pub;//send commands to AR.Drone
+  ros::Publisher cmdPub;//To sen cnd to PiSwarm
+  ros::Publisher velPub;//send cmd directly to cmd_vel topic of the ardrone_autonomy
 
 //Subscribers
-ros::Subscriber cmdSub;//To get cnd from PiSwarm
-ros::Subscriber tagSub;//To get Tag detection result
-ros::Subscriber currentPosSub;
-ros::Subscriber imgSub;
+  ros::Subscriber cmdSub;//To get cnd from PiSwarm
+  ros::Subscriber tagSub;//To get Tag detection result
+  ros::Subscriber currentPosSub;
+  ros::Subscriber imgSub;
 
-ros::ServiceClient toggleCamSrv;
-ros::ServiceClient detecttypeSrv;
+  ros::ServiceClient toggleCamSrv;
+  ros::ServiceClient detecttypeSrv;
 
-ndPause = ros::Duration(2,0);
-/*Publishers*/
+  ndPause = ros::Duration(2,0);
+  /*Publishers*/
 //if sometimes the topic cannot be reslived, try to change the topic below to "ndh_.resolveName("topic")"
-landPub = ndh_.advertise<std_msgs::Empty>("/ardrone/land",1);
-takeoffPub = ndh_.advertise<std_msgs::Empty>("/ardrone/takeoff",1);
-drone_pub = ndh_.advertise<std_msgs::String>("tum_ardrone/com",50);
-cmdPub = ndh_.advertise<std_msgs::String>("piswarm_com", 1);
-velPub = ndh_.advertise<geometry_msgs::Twist>("cmd_vel",1);
+  landPub = ndh_.advertise<std_msgs::Empty>("/ardrone/land",1);
+  takeoffPub = ndh_.advertise<std_msgs::Empty>("/ardrone/takeoff",1);
+  drone_pub = ndh_.advertise<std_msgs::String>("tum_ardrone/com",50);
+  cmdPub = ndh_.advertise<std_msgs::String>("piswarm_com", 1);
+  velPub = ndh_.advertise<geometry_msgs::Twist>("cmd_vel",1);
 
-/*Subscribers*/
+  /*Subscribers*/
 //if sometimes the topic cannot be reslived, try to change the topic below to "ndh_.resolveName("topic")"
-cmdSub = ndh_.subscribe("piswarm_com", 1, piswarmCmdRev);
-tagSub = ndh_.subscribe("/ardrone/navdata", 1, tagResult);
-currentPosSub = ndh_.subscribe("/ardrone/predictedPose", 1, currentPos);
-imgSub = ndh_.subscribe("ardrone/image_raw",10, takePic);
+  cmdSub = ndh_.subscribe("piswarm_com", 1, piswarmCmdRev);
+  tagSub = ndh_.subscribe("/ardrone/navdata", 1, tagResult);
+  currentPosSub = ndh_.subscribe("/ardrone/predictedPose", 1, currentPos);
+  imgSub = ndh_.subscribe("ardrone/image_raw",10, takePic);
 
-toggleCamSrv = ndh_.serviceClient<std_srvs::Empty>("ardrone/togglecam",1);
-detecttypeSrv = ndh_.serviceClient<std_srvs::Empty>("ardrone/detecttype",1);
+  toggleCamSrv = ndh_.serviceClient<std_srvs::Empty>("ardrone/togglecam",1);
+  detecttypeSrv = ndh_.serviceClient<std_srvs::Empty>("ardrone/detecttype",1);
 
-ndPause.sleep();//Wait for 2 seconds to prepare publishers & subscribers
+  ndPause.sleep();//Wait for 2 seconds to prepare publishers & subscribers
 //int i = 1;
 
-while(ros::ok())
-{
-ROS_INFO("Hi from Liu");
-ndPause.sleep();
-/* if(i == 1)
- {
- ROS_INFO("change the detect type");
- detecttypeSrv.call(detect_srvs);
- i =0;
- }*/
+  while(ros::ok())
+  {
+    ROS_INFO("Hi from Liu");
+    ndPause.sleep();
+    /* if(i == 1)
+     {
+     ROS_INFO("change the detect type");
+     detecttypeSrv.call(detect_srvs);
+     i =0;
+     }*/
 
-/* if(i == 1)
- {
- ROS_INFO("toggle the camera");
- toggleCamSrv.call(toggle_srvs);
- i =0;
- }*/
+    /* if(i == 1)
+     {
+     ROS_INFO("toggle the camera");
+     toggleCamSrv.call(toggle_srvs);
+     i =0;
+     }*/
 
-/*
- c_Pi = " ";
- c_Pi = "b";
- s_Pi.data = c_Pi.c_str();
- cmdPub.publish(s_Pi);
- ndPause.sleep();
- ndPause.sleep();
- */
+    /*
+     c_Pi = " ";
+     c_Pi = "b";
+     s_Pi.data = c_Pi.c_str();
+     cmdPub.publish(s_Pi);
+     ndPause.sleep();
+     ndPause.sleep();
+     */
 
-ros::spinOnce();
-}
-return 0;
+    ros::spinOnce();
+  }
+  return 0;
 }
 #endif //end of CLASS_STYLE
 

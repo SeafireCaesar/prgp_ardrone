@@ -184,11 +184,8 @@ public:
   void flightToTarget();
   void flightToHome();
   void moveToPose(double x, double y, double z, double yaw);
-<<<<<<< HEAD
   void stopCmdAndHover();
-=======
   void moveBy(double x, double y, double z, double yaw);
->>>>>>> ca07d90c8d87db22b636d417c4f1144f2590cc80
 };
 
 #else //else for CLASS_STYLE
