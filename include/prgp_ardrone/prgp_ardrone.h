@@ -77,7 +77,7 @@
 #ifdef CLASS_STYLE
 
 #define DESIRED_HEIGHT 0.8
-
+#define EXTRA_HEIGHT 0.5
 /** The main class for the prgp_ardrone package.
  */
 class PRGPARDrone
@@ -97,7 +97,7 @@ private:
   //Subscribers
   ros::Subscriber cmdSub; /**< Subscriber to get the command from Pi-Swarm by piswarm_com */
   ros::Subscriber tagSub; /**< Subscriber to get the navdata, especially the tag result by /ardrone/navdata */
-  ros::Subscriber currentPosSub; /**< Subscriber to get the current position of the AR.Drone */
+  ros::Subscriber currentStateSub; /**< Subscriber to get the current state of the AR.Drone */
   ros::Subscriber imgSub; /**< Subscriber to get the image from camera by /ardrone/image_raw */
 
   //Rob#
@@ -112,8 +112,8 @@ private:
   //std_msgs::String s; /**< Message for sending flight command to AR.Drone by /tum_ardrone/com*/
   //std::string c;
 
-  std_msgs::String s_Pi; /**< Message for sending command to Pi-Swarm by piswarm_com*/
-  std::string c_Pi;
+//  std_msgs::String s_Pi; /**< Message for sending command to Pi-Swarm by piswarm_com*/
+//  std::string c_Pi;
 
   std_srvs::Empty toggle_srvs; /**< Service from client to server to toggle the camera */
   std_srvs::Empty detect_srvs; /**< Service from client to server to change the detection configuration */
@@ -131,12 +131,13 @@ private:
   bool detected_flag; /**< The value will be true when AR.Drone detect the target tag during the flight */
   bool centering_flag; /**< The value will be true before AR.Drone centering the tag */
   bool picture_flag; /**< The value will be true before taking the picture */ //Rob# this name is not too clear. before_picture_flag would be better
-  bool return_flag; /**< The value will be true before returning the Pi-Swarm back home */ //Rob# this name is not too clear. before_return_flag would be better
+  bool return_flag; /**< The value will be true before returning the Pi-Swarm and the Drone back home*/ //Rob# this name is not too clear. before_return_flag would be better
   bool init_tag_det; /**< The value will be true to activate the tag detection at the initial stage of AR.Drone */ //Rob# Is this the target tag? Maybe use target_tag or ttag distinguish
   bool init_detected_flag; /**< The value will be true when tag detected at the initial stage */
   bool home_tag_det; /**< The value will be true to activate the tag detection at the home stage of AR.Drone */
   bool home_detected_flag; /**< The value will be true when tag detected at home stage */
   bool executing_command_flag; //Rob# /**< this value will be true whilst the drone is executing a tum command, it will be set to false after a callback */
+  bool home;
   uint16_t current_tag; /**< change when setTargetTag() is used, 0 for black_roundel, 1 for COCARDE */
   uint16_t tag_type; /**< 0 for black_roundel, 1 for COCARDE, 2 for mixed tag type (current_tag is 0) */
   bool reference_set;
@@ -146,8 +147,6 @@ private:
   uint32_t tag_y_coord = 0;
   float tag_orient = 0;
 
-
-
   typedef struct drone_pose
   {
     double x;
@@ -156,7 +155,6 @@ private:
     double yaw;
   } pose_type;
 
-
 public:
   PRGPARDrone(void);
   ~PRGPARDrone(void);
@@ -164,11 +162,10 @@ public:
   void run();
 
   // callbacks
-  void piswarmCmdRev(const std_msgs::StringConstPtr str);
-  void takePic(const sensor_msgs::ImageConstPtr img);
-  void acquireTagResult(const ardrone_autonomy::Navdata &navdataReceived);
-  void acquireCurrentPos(const tum_ardrone::filter_state& currentPos);
-  void noteCmdCompleted(std_msgs::EmptyConstPtr);
+  void piswarmCmdRevCb(const std_msgs::StringConstPtr str);
+  void takePicCb(const sensor_msgs::ImageConstPtr img);
+  void acquireTagResultCb(const ardrone_autonomy::Navdata &navdataReceived);
+  void acquireCurrentStateCb(const tum_ardrone::filter_state &currentState);
 
   //functions
   void sendCmdToPiswarm();
@@ -179,6 +176,7 @@ public:
   void toggleCam();
   void setTargetTag();
   bool initARDrone();
+  bool smallRangeSearch();
   bool centeringTag(double current_height);
   void flightToSearchTag();
   void flightToTarget();
