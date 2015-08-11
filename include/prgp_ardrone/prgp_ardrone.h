@@ -146,6 +146,8 @@ private:
   uint32_t tag_x_coord = 0;
   uint32_t tag_y_coord = 0;
   float tag_orient = 0;
+  float offset_x = 0;
+  float offset_y = 0;
 
   typedef struct drone_pose
   {
