@@ -95,12 +95,14 @@ private:
   ros::Publisher drone_pub; /**< Publisher for sending flight command to AR.Drone by /tum_ardrone/com */
   ros::Publisher cmdPub; /**< Publisher for sending the command to Pi-Swarm by piswarm_com */
   ros::Publisher velPub; /**< Publisher for sending the command directly to AR.Drone by cmd_vel */
+  ros::Publisher cmd_pub;//////
 
   //Subscribers
   ros::Subscriber cmdSub; /**< Subscriber to get the command from Pi-Swarm by piswarm_com */
   ros::Subscriber tagSub; /**< Subscriber to get the navdata, especially the tag result by /ardrone/navdata */
   ros::Subscriber currentStateSub; /**< Subscriber to get the current state of the AR.Drone */
   ros::Subscriber imgSub; /**< Subscriber to get the image from camera by /ardrone/image_raw */
+  ros::Subscriber cmd_sub;//////
 
   //Rob#
   ros::Subscriber cmdCompleteSub;
@@ -151,6 +153,7 @@ private:
   ///sy
   bool home;
   bool search_finished;
+  CVD::VideoDisplay * window = NULL;
 
   typedef struct drone_pose
   {
@@ -171,6 +174,7 @@ public:
   void takePicCb(const sensor_msgs::ImageConstPtr img);
   void acquireTagResultCb(const ardrone_autonomy::Navdata &navdataReceived);
   void acquireCurrentStateCb(const tum_ardrone::filter_state &currentState);
+  void cmdCb(const std_msgs::Empty &cmd);///
 
   //functions
   void sendCmdToPiswarm();

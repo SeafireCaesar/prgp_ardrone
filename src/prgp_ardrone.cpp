@@ -71,7 +71,8 @@ PRGPARDrone::PRGPARDrone()
   tagSub = ndh_.subscribe("/ardrone/navdata", 1, &PRGPARDrone::acquireTagResultCb, this);
   currentStateSub = ndh_.subscribe("/ardrone/predictedPose", 1, &PRGPARDrone::acquireCurrentStateCb, this);
   imgSub = ndh_.subscribe("/ardrone/image_raw", 10, &PRGPARDrone::takePicCb, this);
-
+  cmd_pub = ndh_.advertise<std_msgs::Empty>("image_cmd", 1); /////
+  cmd_sub = ndh_.subscribe("image_cmd", 1, &PRGPARDrone::cmdCb, this); /////
   //Service client
   toggleCamSrv = ndh_.serviceClient<std_srvs::Empty>("/ardrone/togglecam", 1);
   detecttypeSrv = ndh_.serviceClient<std_srvs::Empty>("/ardrone/detecttype", 1);
@@ -101,6 +102,7 @@ PRGPARDrone::PRGPARDrone()
 
 PRGPARDrone::~PRGPARDrone(void)
 {
+  delete (window);
   //do not write anything here
 }
 
@@ -140,6 +142,10 @@ void PRGPARDrone::piswarmCmdRevCb(const std_msgs::StringConstPtr str)
   }
 }
 
+void PRGPARDrone::cmdCb(const std_msgs::Empty &cmd)
+{
+  picture_flag = true;
+}
 /** Callback function for taking a picture for target tag (ground robot) and beacon.
  *  When the target tag is detected and centred, the callback function will save the image from topic /ardrone/image_raw.
  */
@@ -154,11 +160,16 @@ void PRGPARDrone::takePicCb(const sensor_msgs::ImageConstPtr img)
     pthread_mutex_lock(&pic_mt);
     if (new_image.size().x != img->width || new_image.size().y != img->height)
       new_image.resize(CVD::ImageRef(img->width, img->height));
-    memcpy(new_image.data(), cv_ptr->image.data, img->width * img->height); ///sy cpy the image to mimFrameBW.data()
+    memcpy(new_image.data(), cv_ptr->image.data, img->width * img->height * 3); ///sy cpy the image to mimFrameBW.data()
     pthread_mutex_unlock(&pic_mt);
     ///sy if mutex is necessary? for the new img msg and reading current one, especially img is a ptr
     image.open("output.bmp", std::fstream::out);
+    std::cout << "d********" << std::endl;
     CVD::img_save(new_image, image, CVD::ImageType::BMP);
+    if (window != NULL)
+      delete (window);
+    std::cout << "********" << std::endl;
+    window = (CVD::VideoDisplay *)(new CVD::VideoDisplay(new_image.size())); ///sy destructor will terminate the window!
     glDrawPixels(new_image);
     glFlush();
     image.close();
@@ -366,10 +377,10 @@ void PRGPARDrone::land()
 void PRGPARDrone::sendFlightCmd(std::string c)
 {
   std_msgs::String s; /**< Message for sending flight command to AR.Drone by /tum_ardrone/com*/
-  s.data = c.c_str();
-  pthread_mutex_lock(&send_CS);
-  drone_pub.publish(s);
-  pthread_mutex_unlock(&send_CS);
+//  s.data = c.c_str();
+//  pthread_mutex_lock(&send_CS);
+//  drone_pub.publish(s);
+//  pthread_mutex_unlock(&send_CS);
   ROS_INFO("%s", c.c_str());
   std::cout << "*******************" << s << std::endl; ///sy TODO delete the printing
 }
@@ -447,11 +458,11 @@ bool PRGPARDrone::initARDrone()
 
   sendFlightCmd("c setMaxControl 0.1"); //set AR.Drone speed limit
 
-  sendFlightCmd("c setInitialReachDist 0.1");
+  sendFlightCmd("c setInitialReachDist 0.2");
 
-  sendFlightCmd("c setStayWithinDist 0.3");
+  sendFlightCmd("c setStayWithinDist 0.5");
   // stay 0.2 seconds
-  sendFlightCmd("c setStayTime 1");
+  sendFlightCmd("c setStayTime 2");
   //PTAM
   sendFlightCmd("c lockScaleFP");
 
@@ -464,7 +475,7 @@ bool PRGPARDrone::initARDrone()
 
   ros::spinOnce();
 
-  ROS_INFO("Planned change in alt: %f. Current altd: %f", (DESIRED_HEIGHT - altitude), altitude);
+  std::cout << "Planned change in alt: " << (DESIRED_HEIGHT - altitude) << " Current altd: " << altitude << std::endl;
   moveBy(0.0, 0.0, (DESIRED_HEIGHT - altitude), 0.0);
 
   sendFlightCmd("c setReference $POSE$");
@@ -725,17 +736,13 @@ void PRGPARDrone::run()
 
   if (ros::ok())
   {
-    while (1)
-      ros::spinOnce();
     initARDrone();
     searchForTargetTag(); ///sy exit till centred or search failed
     toggleCam();
-    ros::spinOnce(); ///sy TODO discuss ros::spinOnce();
     picture_flag = true;
     ros::spinOnce(); ///sy takePicCb
     sendCmdToPiswarm(); ///sy piswarm back
     toggleCam();
-    ros::spinOnce();
     flightToHome(); ///sy TODO make sure method returns only when it's home
     land(); ///sy TODO "c land"?
   }
