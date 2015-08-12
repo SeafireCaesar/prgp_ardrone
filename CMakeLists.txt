@@ -115,12 +115,14 @@ set(ARDRONE_HEADER_FILES
 include_directories(
   ${CMAKE_BINARY_DIR}/thirdparty/src/thirdparty/TooN/include 
   ${CMAKE_BINARY_DIR}/thirdparty/src/thirdparty/libcvd/include  
+  ${CMAKE_BINARY_DIR}/thirdparty/src/thirdparty/gvars3/include 
 )  
 
 link_directories(
   ${CMAKE_BINARY_DIR}/thirdparty/src/thirdparty/libcvd/lib 
+  ${CMAKE_BINARY_DIR}/thirdparty/src/thirdparty/gvars3/lib 
 )
-set(CVD_LIBRARIES cvd)
+set(PIC_LIBRARIES GL cvd)
 
 ## Declare a cpp library
 # add_library(prgp_ardrone
@@ -141,7 +143,7 @@ add_executable(prgp_ardrone ${ARDRONE_SOURCE_FILES} ${ARDRONE_HEADER_FILES})
 # )
 target_link_libraries(prgp_ardrone 
   ${catkin_LIBRARIES}
-  ${CVD_LIBRARIES}
+  ${PIC_LIBRARIES}
 )
 
 #############

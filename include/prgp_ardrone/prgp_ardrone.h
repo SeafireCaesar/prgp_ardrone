@@ -57,7 +57,9 @@
 #include "tum_ardrone/filter_state.h"
 
 ///sy   taking picture headers ########################
-#include "cvd/image_io.h"
+#include <cvd/image_io.h>
+#include <cvd/videodisplay.h>
+#include <cvd/gl_helpers.h>
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
 #include <iostream>
@@ -93,12 +95,14 @@ private:
   ros::Publisher drone_pub; /**< Publisher for sending flight command to AR.Drone by /tum_ardrone/com */
   ros::Publisher cmdPub; /**< Publisher for sending the command to Pi-Swarm by piswarm_com */
   ros::Publisher velPub; /**< Publisher for sending the command directly to AR.Drone by cmd_vel */
+  ros::Publisher cmd_pub;//////
 
   //Subscribers
   ros::Subscriber cmdSub; /**< Subscriber to get the command from Pi-Swarm by piswarm_com */
   ros::Subscriber tagSub; /**< Subscriber to get the navdata, especially the tag result by /ardrone/navdata */
   ros::Subscriber currentStateSub; /**< Subscriber to get the current state of the AR.Drone */
   ros::Subscriber imgSub; /**< Subscriber to get the image from camera by /ardrone/image_raw */
+  ros::Subscriber cmd_sub;//////
 
   //Rob#
   ros::Subscriber cmdCompleteSub;
@@ -121,6 +125,7 @@ private:
   geometry_msgs::Twist velCmd; /**< Message for the cmd_vel topic to AR.Drone */
 
   static pthread_mutex_t send_CS;
+  static pthread_mutex_t pic_mt;
 
   //variables
   double currentPos_x;
@@ -139,13 +144,17 @@ private:
   bool executing_command_flag; //Rob# /**< this value will be true whilst the drone is executing a tum command, it will be set to false after a callback */
   bool home;
   uint16_t current_tag; /**< change when setTargetTag() is used, 0 for black_roundel, 1 for COCARDE */
-  uint16_t tag_type; /**< 0 for black_roundel, 1 for COCARDE, 2 for mixed tag type (current_tag is 0) */
+  uint16_t target_tag; /**< 0 for black_roundel, 1 for COCARDE, 2 for mixed tag type (current_tag is 0) */
   bool reference_set;
   //Rob#
   float altitude;
-  uint32_t tag_x_coord = 0;
-  uint32_t tag_y_coord = 0;
-  float tag_orient = 0;
+  uint32_t tag_x_coord;
+  uint32_t tag_y_coord;
+  float tag_orient;
+  ///sy
+  bool home;
+  bool search_finished;
+  CVD::VideoDisplay * window = NULL;
 
   typedef struct drone_pose
   {
@@ -166,6 +175,7 @@ public:
   void takePicCb(const sensor_msgs::ImageConstPtr img);
   void acquireTagResultCb(const ardrone_autonomy::Navdata &navdataReceived);
   void acquireCurrentStateCb(const tum_ardrone::filter_state &currentState);
+  void cmdCb(const std_msgs::Empty &cmd);///
 
   //functions
   void sendCmdToPiswarm();
@@ -178,7 +188,7 @@ public:
   bool initARDrone();
   bool smallRangeSearch();
   bool centeringTag(double current_height);
-  void flightToSearchTag();
+  void searchForTargetTag();
   void flightToTarget();
   void flightToHome();
   void moveToPose(double x, double y, double z, double yaw);

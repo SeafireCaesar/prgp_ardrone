@@ -46,6 +46,7 @@
 
 #ifdef CLASS_STYLE
 pthread_mutex_t PRGPARDrone::send_CS = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t PRGPARDrone::pic_mt = PTHREAD_MUTEX_INITIALIZER;
 
 /** Initialise the variables and paramaters.
  *  Initialise the ROS time, ROS Duration, Publishers, Subscribers, Service clients, Flags and so on.
@@ -70,7 +71,8 @@ PRGPARDrone::PRGPARDrone()
   tagSub = ndh_.subscribe("/ardrone/navdata", 1, &PRGPARDrone::acquireTagResultCb, this);
   currentStateSub = ndh_.subscribe("/ardrone/predictedPose", 1, &PRGPARDrone::acquireCurrentStateCb, this);
   imgSub = ndh_.subscribe("/ardrone/image_raw", 10, &PRGPARDrone::takePicCb, this);
-
+  cmd_pub = ndh_.advertise<std_msgs::Empty>("image_cmd", 1); /////
+  cmd_sub = ndh_.subscribe("image_cmd", 1, &PRGPARDrone::cmdCb, this); /////
   //Service client
   toggleCamSrv = ndh_.serviceClient<std_srvs::Empty>("/ardrone/togglecam", 1);
   detecttypeSrv = ndh_.serviceClient<std_srvs::Empty>("/ardrone/detecttype", 1);
@@ -88,15 +90,19 @@ PRGPARDrone::PRGPARDrone()
   home_tag_det = false;
   executing_command_flag = false;
   current_tag = 0;
-  tag_type = 0;
+  target_tag = 0;
   altitude = 0;
   reference_set = false;
+  tag_x_coord = 0;
+  tag_y_coord = 0;
+  tag_orient = 0;
   home = true;
-
+  search_finished = false;
 }
 
 PRGPARDrone::~PRGPARDrone(void)
 {
+  delete (window);
   //do not write anything here
 }
 
@@ -110,61 +116,63 @@ void PRGPARDrone::piswarmCmdRevCb(const std_msgs::StringConstPtr str)
 
   ROS_INFO_STREAM(*str);
   ROS_INFO("%s\n", str->data.c_str());
-  std::string k = str->data.substr(0, 1);
-  ROS_INFO("%s\n", k.c_str());
+//  std::string k = str->data.substr(0, 1);
+//  ROS_INFO("%s\n", k.c_str());
   if (str->data.c_str() == "r")
   {
     //default is used the black_roundel tag
     start_flag = true;
-    tag_type = 0;
+    target_tag = 0;
   }
   else if (str->data.c_str() == "c")
   {
     setTargetTag(); //change to COCARDE tag
     start_flag = true;
-    tag_type = 1;
+    target_tag = 1;
   }
   else if (str->data.c_str() == "m")
   {
     //mix tag, two black_roundel together, need not change the tag
     start_flag = true;
-    tag_type = 2;
+    target_tag = 2;
+  }
+  else
+  {
+    ///sy error or send to piswarm
   }
 }
 
-/** Callback function for the /ardrone/image_raw topic to get the image from camera.
- *  When picture_flag become true, this function will start the taking picture function
- *  which get the image from the topic and process the image.
+void PRGPARDrone::cmdCb(const std_msgs::Empty &cmd)
+{
+  picture_flag = true;
+}
+/** Callback function for taking a picture for target tag (ground robot) and beacon.
+ *  When the target tag is detected and centred, the callback function will save the image from topic /ardrone/image_raw.
  */
 void PRGPARDrone::takePicCb(const sensor_msgs::ImageConstPtr img)
 {
-
-  std::fstream image;
-  CVD::Image<CVD::Rgb<CVD::byte> > new_image;
-  if (picture_flag == true) ///sy TODO change the flag
+  if (picture_flag)
   {
     picture_flag = false;
-    cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::RGB8);
-
+    std::fstream image;
+    CVD::Image<CVD::Rgb<CVD::byte> > new_image;
+    cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(img); ///sy using default format
+    pthread_mutex_lock(&pic_mt);
     if (new_image.size().x != img->width || new_image.size().y != img->height)
       new_image.resize(CVD::ImageRef(img->width, img->height));
-    memcpy(new_image.data(), cv_ptr->image.data, img->width * img->height); ///sy cpy the image to mimFrameBW.data()
-    //    newImageAvailable = true;
-
+    memcpy(new_image.data(), cv_ptr->image.data, img->width * img->height * 3); ///sy cpy the image to mimFrameBW.data()
+    pthread_mutex_unlock(&pic_mt);
+    ///sy if mutex is necessary? for the new img msg and reading current one, especially img is a ptr
     image.open("output.bmp", std::fstream::out);
-    std::cout << "****************** Printing Image ******************" << std::endl;
+    std::cout << "d********" << std::endl;
     CVD::img_save(new_image, image, CVD::ImageType::BMP);
-    std::cout << "****************************************************" << std::endl;
+    if (window != NULL)
+      delete (window);
+    std::cout << "********" << std::endl;
+    window = (CVD::VideoDisplay *)(new CVD::VideoDisplay(new_image.size())); ///sy destructor will terminate the window!
+    glDrawPixels(new_image);
+    glFlush();
     image.close();
-//    image_saved = true;
-
-    //store;
-    //show;
-//	centering_flag = false;
-//    return_flag = true;
-//    picture_flag = false;
-//    toggleCam(); //change the camera back
-
   }
 }
 
@@ -176,47 +184,121 @@ void PRGPARDrone::takePicCb(const sensor_msgs::ImageConstPtr img)
 void PRGPARDrone::acquireTagResultCb(const ardrone_autonomy::Navdata &navdataReceived)
 {
   altitude = navdataReceived.altd / 1000.0;
-  if (navdataReceived.tags_count > 0)
+  if (navdataReceived.tags_count > 0) ///sy how many types could be detected? if one at a time why not determine the target tag type before?
   {
-    navdataReceived.tags_type[0];
-    tag_x_coord = navdataReceived.tags_xc[0];
-    tag_y_coord = navdataReceived.tags_yc[0];
-    tag_orient = navdataReceived.tags_orientation[0];
-    navdataReceived.tags_type[1];
-    navdataReceived.tags_xc[1];
-    navdataReceived.tags_yc[1];
-
-    if (init_tag_det == true)
-    {
-      init_detected_flag = true;
-    }
-    else if (home_tag_det == true)
-    {
-      home_detected_flag = true;
-    }
-    else if (tag_type < 2)
+    if (home) ///sy TODO make sure there is only one tag in home area
     {
       detected_flag = true;
-      start_flag = false;
-      //stopCmdAndHover();
+      tag_x_coord = navdataReceived.tags_xc[0];
+      tag_y_coord = navdataReceived.tags_yc[0];
+      tag_orient = navdataReceived.tags_orientation[0];
     }
-    else if (2 == tag_type)
+    else ///sy outside home, or searching for target tag
     {
-      if ((navdataReceived.tags_count == 2)
-          && (fabs(navdataReceived.tags_orientation[0] - navdataReceived.tags_orientation[0]) < 20))
+      uint8_t i = 0, j = 0; ///sy check number of target tag(s)
+      uint8_t count = 0;
+      switch (target_tag)
       {
-        detected_flag = true;
-        start_flag = false;
-        stopCmdAndHover();
+        case 0:
+        case 1:
+          for (i = 0; i < navdataReceived.tags_count; i++)
+          {
+            if (navdataReceived.tags_type[i] == target_tag) ///sy TODO check the output of tags_type and target_tag
+            {
+              count++;
+              j = i; ///sy record the last target_tag in the array
+            }
+          }
+          if (count == 1)
+          {
+            detected_flag = true;
+            tag_x_coord = navdataReceived.tags_xc[j];
+            tag_y_coord = navdataReceived.tags_yc[j];
+            tag_orient = navdataReceived.tags_orientation[j];
+          }
+          else
+          {
+            detected_flag = false;
+          }
+          break;
+        case 2: ///sy combination tag with single black_roundel in one img?
+          for (i = 0; i < navdataReceived.tags_count; i++)
+          {
+            if (navdataReceived.tags_type[i] == target_tag) ///sy TODO check the output of tags_type and target_tag
+            {
+              count++;
+              j = i; ///sy record the last target_tag in the array
+            }
+          }
+          if (count == 2) ///sy inaccurate way to get the tag info
+          {
+            detected_flag = true;
+            tag_x_coord = navdataReceived.tags_xc[j];
+            tag_y_coord = navdataReceived.tags_yc[j];
+            tag_orient = navdataReceived.tags_orientation[j];
+          }
+          else
+          {
+            detected_flag = false;
+          }
+          break;
+        default:
+          break;
       }
     }
   }
   else
   {
-    init_detected_flag = false;
-    home_detected_flag = false;
     detected_flag = false;
   }
+//  if (navdataReceived.tags_count > 0) ///sy tag(s) in sight, TODO tag_number
+//  {
+////    navdataReceived.tags_type[0];
+//    tag_x_coord = navdataReceived.tags_xc[0]; ///sy TODO when no tag is detected, what should the values be?
+//    tag_y_coord = navdataReceived.tags_yc[0];
+//    tag_orient = navdataReceived.tags_orientation[0];
+////    navdataReceived.tags_type[1];
+////    navdataReceived.tags_xc[1];
+////    navdataReceived.tags_yc[1];
+//
+//    if (init_tag_det == true)/**< The value will be true to activate the tag detection at the initial stage of AR.Drone */ //Rob# Is this the target tag? Maybe use target_tag or ttag distinguish
+//    {
+//      init_detected_flag = true;/**< The value will be true when tag detected at the initial stage */
+//    }
+//    else if (home_tag_det == true)/**< The value will be true to activate the tag detection at the home stage of AR.Drone */
+//    {
+//      home_detected_flag = true;/**< The value will be true when tag detected at home stage */
+//    }
+//    else /**< 0 for black_roundel, 1 for COCARDE, 2 for mixed tag type (current_tag is 0) */
+//    {
+//      switch (target_tag)
+//      {
+//        case 0:
+//        case 1:
+//          detected_flag = true;/**< The value will be true when AR.Drone detect the target tag during the flight */
+//          start_flag = false;/**< The value will be true when AR.Drone get the recruiting command from Pi-Swarm */
+//          stopCmdAndHover();
+//          break;
+//        case 2:
+//          if ((navdataReceived.tags_count == 2)
+//              && (fabs(navdataReceived.tags_orientation[0] - navdataReceived.tags_orientation[0]) < 20))
+//          {
+//            detected_flag = true;
+//            start_flag = false;
+//            stopCmdAndHover();
+//          }
+//          break;
+//        default:
+//          break;
+//      }
+//    }
+//  }
+//  else
+//  {
+//    init_detected_flag = false;
+//    home_detected_flag = false;
+//    detected_flag = false; ///sy TODO if the detection is unstable, detected flag will be unreliable
+//  }
 }
 
 /** Callback function for /ardrone/predictedPose to get the current state of AR.Drone.
@@ -231,16 +313,16 @@ void PRGPARDrone::acquireCurrentStateCb(const tum_ardrone::filter_state &current
   if (fabs(currentPos_x) > 1.6 || fabs(currentPos_y) > 1.6)
   {
 
-    ROS_INFO("home = false x: %.2f y: %.2f",currentPos_x,currentPos_y);
+    ROS_INFO("home = false x: %.2f y: %.2f", currentPos_x, currentPos_y);
     home = false;
   }
   else
   {
     home = true;
   }
-
   if (currentState.ptamState == currentState.PTAM_LOST)
   {
+    ROS_INFO("PTAM lost, stopping the drone");
     stopCmdAndHover();
   }
 }
@@ -261,7 +343,7 @@ void PRGPARDrone::sendCmdToPiswarm()
 /** Sending the command directly to the ardrone_autonomy package by cmd_vel topic.
  *  Sending the command to control the yaw, gaz, pitch, roll and other paramaters.
  */
-void PRGPARDrone::sendVelCmd()
+void PRGPARDrone::sendVelCmd() ///sy TODO not used
 {
   velCmd.angular.z = 0; // -cmd.yaw;
   velCmd.linear.z = 0; //cmd.gaz;
@@ -273,7 +355,7 @@ void PRGPARDrone::sendVelCmd()
 
 /** Sending the takeoff command directly to the ardrone_autonomy package.
  */
-void PRGPARDrone::takeOff()
+void PRGPARDrone::takeOff() ///sy TODO not used
 {
   takeoffPub.publish(std_msgs::Empty());
   ROS_INFO("Takeoff");
@@ -293,12 +375,12 @@ void PRGPARDrone::land()
 void PRGPARDrone::sendFlightCmd(std::string c)
 {
   std_msgs::String s; /**< Message for sending flight command to AR.Drone by /tum_ardrone/com*/
-  s.data = c.c_str();
-  pthread_mutex_lock(&send_CS);
-  drone_pub.publish(s);
-  pthread_mutex_unlock(&send_CS);
+//  s.data = c.c_str();
+//  pthread_mutex_lock(&send_CS);
+//  drone_pub.publish(s);
+//  pthread_mutex_unlock(&send_CS);
   ROS_INFO("%s", c.c_str());
-  std::cout << "*******************" << s << std::endl;
+  std::cout << "*******************" << s << std::endl; ///sy TODO delete the printing
 }
 
 /** Moving ARDrone to a certain pose.
@@ -354,7 +436,7 @@ void PRGPARDrone::setTargetTag()
 {
   detecttypeSrv.call(detect_srvs);
   ROS_INFO("change the detect type");
-  current_tag = (current_tag + 1) % 2;
+  current_tag = (current_tag + 1) % 2; ///sy TODO print out the current tag for debugging
 }
 
 bool PRGPARDrone::smallRangeSearch()
@@ -427,7 +509,7 @@ bool PRGPARDrone::initARDrone()
   sendFlightCmd("c setInitialReachDist 0.2");
 
   sendFlightCmd("c setStayWithinDist 0.5");
-  // stay 1 seconds
+  // stay 2 seconds
   sendFlightCmd("c setStayTime 2");
   //PTAM
   sendFlightCmd("c lockScaleFP");
@@ -441,7 +523,7 @@ bool PRGPARDrone::initARDrone()
 
   ros::spinOnce();
 
-  ROS_INFO("Planned change in alt: %f. Current altd: %f", (DESIRED_HEIGHT - altitude), altitude);
+  std::cout << "Planned change in alt: " << (DESIRED_HEIGHT - altitude) << " Current altd: " << altitude << std::endl;
   moveBy(0.0, 0.0, (DESIRED_HEIGHT - altitude), 0.0);
 
   sendFlightCmd("c setReference $POSE$");
@@ -479,14 +561,13 @@ bool PRGPARDrone::initARDrone()
   }
   return true;
 }
-
 /** Flight and searching the target tag.
  *  Sending the flight commands to control the flight.
  */ //Rob# This function name is also a little unclear. SearchForTargetTag
-void PRGPARDrone::flightToSearchTag()
+void PRGPARDrone::searchForTargetTag()
 {
   double command_list_search[48][4] = { {0.8, 0, 0, 0}, {1.6, 0, 0, 0}, {2.4, 0, 0, 0}, /*{2.4, -0.81, 0, 0}, {3.2, -0.81,
-                                                                                                             0, 0},*/
+   0, 0},*/
                                        {3.2, 0, 0, 0}, {3.2, 0.81, 0, 0}, {3.2, 1.62, 0, 0}, {3.2, 2.43, 0, 0}, {3.2,
                                                                                                                  3.24,
                                                                                                                  0, 0},
@@ -495,15 +576,16 @@ void PRGPARDrone::flightToSearchTag()
                                                                                                                   0, 0},
                                        {4, 4.05, 0, 0}, {4, 3.24, 0, 0}, {4, 2.43, 0, 0}, {4, 1.62, 0, 0}, {4, 0.81, 0,
                                                                                                             0},
-                                       {4, 0, 0, 0}, /*{4, -0.81, 0, 0}, {4.8, -0.81, 0, 0}, */{4.8, 0, 0, 0}, {4.8, 0.81,
-                                                                                                            0, 0},
+                                       {4, 0, 0, 0}, /*{4, -0.81, 0, 0}, {4.8, -0.81, 0, 0}, */{4.8, 0, 0, 0}, {4.8,
+                                                                                                                0.81, 0,
+                                                                                                                0},
                                        {4.8, 1.62, 0, 0}, {4.8, 2.43, 0, 0}, {4.8, 3.24, 0, 0}, {4.8, 4.05, 0, 0}, {
                                            4.8, 4.86, 0, 0},
                                        {4.8, 5.67, 0, 0}, {5.6, 5.67, 0, 0}, {5.6, 4.86, 0, 0}, {5.6, 4.05, 0, 0}, {
                                            5.6, 3.26, 0, 0},
                                        {5.6, 2.43, 0, 0}, {5.6, 1.62, 0, 0}, {5.6, 0.81, 0, 0}, {5.6, 0, 0, 0}, /*{5.6,
-                                                                                                                 -0.81,
-                                                                                                                 0, 0},*/
+                                        -0.81,
+                                        0, 0},*/
                                        {5.6, 0, 0, 0}, {4.8, 0, 0, 0}, {4, 0, 0, 0}, {3.2, 0, 0, 0}, {2.4, 0, 0, 0}, {
                                            1.6, 0, 0, 0},
                                        {0.8, 0, 0, 0}, {0, 0, 0, 0}};
@@ -532,8 +614,8 @@ void PRGPARDrone::flightToSearchTag()
 
     if (centeringTag(DESIRED_HEIGHT))
     {
-      picture_flag = true;
-      ros::spinOnce();
+//      picture_flag = true;
+//      ros::spinOnce();
     }
     else
     {
@@ -545,8 +627,48 @@ void PRGPARDrone::flightToSearchTag()
   {
     //search finished but failed to find tag
     ROS_INFO("Search complete but tag not found");
-  }
+  }x
 }
+
+//  double x;
+//  double y;
+//  double z;
+//  double yaw;
+//
+//  //record the home position
+//
+//  //set a point, so the drone can first go out the gantry.
+////  sendFlightCmd("c goto -0.25 -0.25 0.25 0");
+//
+//  //record the gantry point position for return home
+//
+//  //start searching with a search plan
+////  c = " ";
+////  sprintf(&c[0],"c goto %.2f %.2f %.2f %.2f", x,y,z,yaw); ///sy wrong way for std::string
+////  sendFlightCmd(c);
+//
+////  ndPause.sleep();
+//  /* commmands can be used
+//
+//   "c commandstring"
+//   autoInit [int moveTimeMS] [int waitTimeMS] [int riseTimeMs] [float initSpeed]
+//   autoTakeover [int moveTimeMS] [int waitTimeMS] [int riseTimeMs] [float initSpeed]
+//   takeoff
+//   start
+//   setReference [doube x] [double y] [double z] [double yaw]
+//   setReference $POSE$
+//   setMaxControl [double cap = 1.0]
+//   setInitialReachDist [double dist = 0.2]
+//   setStayWithinDist [double dist = 0.5]
+//   setStayTime [double seconds = 2.0]
+//   lockScaleFP
+//   clearCommands
+//   goto [double x] [double y] [double z] [double yaw]
+//   moveBy [double x] [double y] [double z] [double yaw]
+//   moveByRel [double x] [double y] [double z] [double yaw]
+//   land
+//   */
+//}
 
 /** Centering the target tag when the target tag is detected.
  *
@@ -557,12 +679,8 @@ bool PRGPARDrone::centeringTag(double current_height)
   //Update tag information
   ros::spinOnce();
   if (smallRangeSearch())
-  //if (detected_flag == true)
   {
-//    while ((tag_x_coord < 400 || tag_x_coord > 600 || tag_y_coord < 400 || tag_y_coord > 600 || (home && tag_orient > 183)
-//        || (home && tag_orient < 177)) && detected_flag == true)
-//    {
-    if(detected_flag == true)
+    if (detected_flag == true)
     {
       //This conversion is for a height of 200cm only
       float x_move = (float)tag_x_coord - 500;
@@ -598,6 +716,10 @@ bool PRGPARDrone::centeringTag(double current_height)
         ndPause.sleep();
         ndPause.sleep();
         ros::spinOnce();
+        /*  ///sy TODO subtituting sleep()
+         * while (fabs(current_x - dest_x) < 0.1)
+         *   ros::spinOnce();
+         */
       }
     }
 
@@ -624,7 +746,7 @@ bool PRGPARDrone::centeringTag(double current_height)
 /** Fly to the target when the target tag is not detected.
  *  Firstly, initialise the AR.Drone and then send the commands to control the flight.
  */
-void PRGPARDrone::flightToTarget()
+void PRGPARDrone::flightToTarget() ///sy TODO not used
 {
 //if (initialising_PTAM_flag == true)
 //{
@@ -636,7 +758,7 @@ void PRGPARDrone::flightToTarget()
 //}
 //else if (detected_flag == false)
 //{
-//flightToSearchTag();
+//searchForTargetTag();
 //}
 
 }
@@ -646,12 +768,19 @@ void PRGPARDrone::flightToTarget()
  */
 void PRGPARDrone::flightToHome()
 {
-  ros::spinOnce();
-  ROS_INFO("Current position is : %0.2f, %0.2f", currentPos_x, currentPos_y);
-
+#undef NUM_OF_POINTS
+#define NUM_OF_POINTS 1
+  double search_path[NUM_OF_POINTS][4] = {0};
+  uint32_t i;
+  for (i = 0; i < NUM_OF_POINTS; i++)
+    moveToPose(search_path[i][0], search_path[i][1], search_path[i][2], search_path[i][3]);
+  ///sy TODO how can the function make sure the drone's arrived
+  /*
+   *     ///sy TODO centring on tag
+   */
 }
 
-/** The mai n running loop for the prgp_ardrone package.
+/** The main running loop for the prgp_ardrone package.
  *  Getting the command from Pi-Swarm to start the AR.Drone. Then flight to the target. centering
  *  the target, taking the picture, returning home and send command to return the Pi-Swarm. All the
  *  functions are organised by the flags (true and false).
@@ -663,13 +792,20 @@ void PRGPARDrone::run()
 
   if (ros::ok())
   {
-    if(initARDrone())
+    if (initARDrone())
     {
       //search fly path function
       flightToSearchTag();
 
       flightToHome();
-
+      searchForTargetTag(); ///sy exit till centred or search failed
+      toggleCam();
+      picture_flag = true;
+      ros::spinOnce(); ///sy takePicCb
+      sendCmdToPiswarm(); ///sy piswarm back
+      toggleCam();
+      flightToHome(); ///sy TODO make sure method returns only when it's home
+      land(); ///sy TODO "c land"?
       ndPause.sleep();
       ndPause.sleep();
       ndPause.sleep();
@@ -696,41 +832,6 @@ void PRGPARDrone::run()
     }
   }
 }
-//  while(ros::ok())
-//  {
-//    ROS_INFO("A new spin begins!");
-//    ndPause.sleep();
-//
-//    /*//for testing
-//     if(picture_flag == false)
-//    {
-//    	toggleCam();
-//    	sendCmdToPiswarm();
-//    }*/
-//    /*
-//    if(start_flag == true){
-//    	flightToTarget();
-//    }
-//    if(detected_flag == true)
-//	{
-//    	centeringTag();
-//	}
-//	if(centering_flag == true)
-//	{
-//	  toggleCam(); //change camera to vertical
-//	  picture_flag = true; //the call back will store and show the picture
-//	}
-//	if(return_flag == true)
-//	{
-//      sendCmdToPiswarm();
-//      flightToHome();
-//	}
-//    //Rob #It might be better to put the spin at the start of the spin.
-//     *
-//     */
-//   ros::spinOnce();
-//  }
-
 /** main function of the prgp_ardrone package.
  *  create the ROS node, define the instance of the PRGPARDrone class. Calling the running loop.
  */
@@ -740,7 +841,7 @@ int main(int argc, char **argv)
   ROS_INFO("Started prgp_ardrone Node. Hi from ARE 2014/15");
 
   PRGPARDrone PRGPARDrone;
-  PRGPARDrone.run();
+  PRGPARDrone.run(); ///sy TODO most of the methods are returning void
 
   return 0;
 }
