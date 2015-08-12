@@ -79,7 +79,7 @@
 #ifdef CLASS_STYLE
 
 #define DESIRED_HEIGHT 0.8
-
+#define EXTRA_HEIGHT 0.5
 /** The main class for the prgp_ardrone package.
  */
 class PRGPARDrone
@@ -136,12 +136,13 @@ private:
   bool detected_flag; /**< The value will be true when AR.Drone detect the target tag during the flight */
   bool centering_flag; /**< The value will be true before AR.Drone centering the tag */
   bool picture_flag; /**< The value will be true before taking the picture */ //Rob# this name is not too clear. before_picture_flag would be better
-  bool return_flag; /**< The value will be true before returning the Pi-Swarm back home */ //Rob# this name is not too clear. before_return_flag would be better
+  bool return_flag; /**< The value will be true before returning the Pi-Swarm and the Drone back home*/ //Rob# this name is not too clear. before_return_flag would be better
   bool init_tag_det; /**< The value will be true to activate the tag detection at the initial stage of AR.Drone */ //Rob# Is this the target tag? Maybe use target_tag or ttag distinguish
   bool init_detected_flag; /**< The value will be true when tag detected at the initial stage */
   bool home_tag_det; /**< The value will be true to activate the tag detection at the home stage of AR.Drone */
   bool home_detected_flag; /**< The value will be true when tag detected at home stage */
   bool executing_command_flag; //Rob# /**< this value will be true whilst the drone is executing a tum command, it will be set to false after a callback */
+  bool home;
   uint16_t current_tag; /**< change when setTargetTag() is used, 0 for black_roundel, 1 for COCARDE */
   uint16_t target_tag; /**< 0 for black_roundel, 1 for COCARDE, 2 for mixed tag type (current_tag is 0) */
   bool reference_set;
@@ -185,6 +186,7 @@ public:
   void toggleCam();
   void setTargetTag();
   bool initARDrone();
+  bool smallRangeSearch();
   bool centeringTag(double current_height);
   void searchForTargetTag();
   void flightToTarget();
