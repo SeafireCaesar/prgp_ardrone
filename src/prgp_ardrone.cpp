@@ -207,7 +207,7 @@ void PRGPARDrone::acquireTagResultCb(const ardrone_autonomy::Navdata &navdataRec
       {
         detected_flag = true;
         start_flag = false;
-        stopCmdAndHover();
+        //stopCmdAndHover();
       }
     }
   }
@@ -225,8 +225,8 @@ void PRGPARDrone::acquireTagResultCb(const ardrone_autonomy::Navdata &navdataRec
  */
 void PRGPARDrone::acquireCurrentStateCb(const tum_ardrone::filter_state &currentState)
 {
-  currentPos_x = currentState.x;
-  currentPos_y = currentState.y;
+  currentPos_x = currentState.x + offset_x;
+  currentPos_y = currentState.y + offset_y;
 
   if (fabs(currentPos_x) > 1.6 || fabs(currentPos_y) > 1.6)
   {
@@ -298,7 +298,6 @@ void PRGPARDrone::sendFlightCmd(std::string c)
   drone_pub.publish(s);
   pthread_mutex_unlock(&send_CS);
   ROS_INFO("%s", c.c_str());
-  std::cout << "*******************" << s << std::endl;
 }
 
 /** Moving ARDrone to a certain pose.
@@ -321,8 +320,11 @@ void PRGPARDrone::moveToPose(double x, double y, double z, double yaw = 0)
  */
 void PRGPARDrone::stopCmdAndHover()
 {
+  double tag_x = currentPos_x;
+  double tag_y = currentPos_y;
   stopCmdAndHoverSrv.call(stopCmd_srvs);
   ROS_INFO("Command is cleared.");
+  moveToPose(tag_x,tag_y,DESIRED_HEIGHT,0);
 }
 
 /** Moving ARDrone by a distance and angle from its current pose.
@@ -359,7 +361,10 @@ void PRGPARDrone::setTargetTag()
 
 bool PRGPARDrone::smallRangeSearch()
 {
-
+  if (detected_flag == true)
+  {
+    return true;
+  }
   double small_distance = 0;
 
   if (home)
@@ -433,6 +438,8 @@ bool PRGPARDrone::initARDrone()
   sendFlightCmd("c lockScaleFP");
 
   sendFlightCmd("c setReference $POSE$");
+  offset_x = currentPos_x;
+  offset_y = currentPos_y;
 
   ndPause.sleep();
   ndPause.sleep();
@@ -445,7 +452,12 @@ bool PRGPARDrone::initARDrone()
   moveBy(0.0, 0.0, (DESIRED_HEIGHT - altitude), 0.0);
 
   sendFlightCmd("c setReference $POSE$");
-
+  offset_x = currentPos_x;
+  offset_y = currentPos_y;
+  ros::spinOnce();
+  std::cout << "%%%%%%%%%%%" << std::endl;
+  std::cout << currentPos_x << std::endl;
+  std::cout << currentPos_y <<std::endl;
   moveToPose(0.0, 0.0, EXTRA_HEIGHT, 0);
 
   ndPause.sleep();
@@ -457,7 +469,7 @@ bool PRGPARDrone::initARDrone()
 
   ros::spinOnce();
 
-  if (smallRangeSearch() == true)
+  if (1)//(smallRangeSearch() == true) ///sy small range search is part of centering
   {
     if (centeringTag(DESIRED_HEIGHT + EXTRA_HEIGHT))
     {
@@ -477,7 +489,7 @@ bool PRGPARDrone::initARDrone()
     sendFlightCmd("c land");
     return false;
   }
-  return true;
+  return true;	///sy default value should be false
 }
 
 /** Flight and searching the target tag.
@@ -514,9 +526,9 @@ void PRGPARDrone::flightToSearchTag()
                command_list_search[i][3]);
     i++;
   }
-
-  ros::spinOnce();
-  while (!detected_flag && !home)
+  while (home) ///sy wait till drone is outside of home
+    ros::spinOnce();
+  while (!detected_flag && !home)  ///sy wait till tag is detected or come back to home
   {
     ros::spinOnce();
   }
@@ -556,13 +568,13 @@ bool PRGPARDrone::centeringTag(double current_height)
 
   //Update tag information
   ros::spinOnce();
-  if (smallRangeSearch())
+  if (smallRangeSearch())  ///sy even if the tag is in sight?
   //if (detected_flag == true)
   {
 //    while ((tag_x_coord < 400 || tag_x_coord > 600 || tag_y_coord < 400 || tag_y_coord > 600 || (home && tag_orient > 183)
 //        || (home && tag_orient < 177)) && detected_flag == true)
 //    {
-    if(detected_flag == true)
+    if(detected_flag == true) ///sy if small range search fails, it is false obviously.
     {
       //This conversion is for a height of 200cm only
       float x_move = (float)tag_x_coord - 500;
@@ -665,6 +677,10 @@ void PRGPARDrone::run()
   {
     if(initARDrone())
     {
+      while(1)
+      {
+        ros::spinOnce();
+      }
       //search fly path function
       flightToSearchTag();
 
