@@ -75,7 +75,6 @@ PRGPARDrone::PRGPARDrone()
   toggleCamSrv = ndh_.serviceClient<std_srvs::Empty>("/ardrone/togglecam", 1);
   detecttypeSrv = ndh_.serviceClient<std_srvs::Empty>("/ardrone/detecttype", 1);
   stopCmdAndHoverSrv = ndh_.serviceClient<std_srvs::Empty>("drone_autopilot/clearCommands", 1);
-  stopCmdAndHoverSrv = ndh_.serviceClient<std_srvs::Empty>("drone_autopilot/clearCommands", 1);
 
   //Variables
   start_flag = false;
@@ -83,6 +82,7 @@ PRGPARDrone::PRGPARDrone()
   aligning_to_home_tag = false;
   detected_flag = false;
   centering_flag = false;
+  picture_flag = false;
   return_flag = false;
   init_tag_det = false;
   home_tag_det = false;
@@ -91,6 +91,7 @@ PRGPARDrone::PRGPARDrone()
   tag_type = 0;
   altitude = 0;
   reference_set = false;
+  home = true;
 
 }
 
@@ -139,12 +140,11 @@ void PRGPARDrone::takePicCb(const sensor_msgs::ImageConstPtr img)
 {
 
   std::fstream image;
-  CVD::Image<CVD::byte> new_image;
-  static bool once = true;
-  if (once) ///sy TODO change the flag
+  CVD::Image<CVD::Rgb<CVD::byte> > new_image;
+  if (picture_flag == true) ///sy TODO change the flag
   {
-    once = false;
-    cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::MONO8);
+    picture_flag = false;
+    cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::RGB8);
 
     if (new_image.size().x != img->width || new_image.size().y != img->height)
       new_image.resize(CVD::ImageRef(img->width, img->height));
@@ -198,7 +198,7 @@ void PRGPARDrone::acquireTagResultCb(const ardrone_autonomy::Navdata &navdataRec
     {
       detected_flag = true;
       start_flag = false;
-      stopCmdAndHover();
+      //stopCmdAndHover();
     }
     else if (2 == tag_type)
     {
@@ -227,6 +227,18 @@ void PRGPARDrone::acquireCurrentStateCb(const tum_ardrone::filter_state &current
 {
   currentPos_x = currentState.x;
   currentPos_y = currentState.y;
+
+  if (fabs(currentPos_x) > 1.6 || fabs(currentPos_y) > 1.6)
+  {
+
+    ROS_INFO("home = false x: %.2f y: %.2f",currentPos_x,currentPos_y);
+    home = false;
+  }
+  else
+  {
+    home = true;
+  }
+
   if (currentState.ptamState == currentState.PTAM_LOST)
   {
     stopCmdAndHover();
@@ -299,7 +311,7 @@ void PRGPARDrone::moveToPose(double x, double y, double z, double yaw = 0)
   std::string c = buff;
   sendFlightCmd(c);
 }
-/** Stop the current flight comman and hover the ARDrone.
+/** Stop the current flight command and hover the ARDrone.
  *  The function use a separate service defined in the tum_ardrone package to
  *  clear the command queue (gaz, pitch, roll, yaw) in order to stop the current
  *  flight command and stop the AR.Drone by delete the currentKI which is the instance
@@ -345,6 +357,54 @@ void PRGPARDrone::setTargetTag()
   current_tag = (current_tag + 1) % 2;
 }
 
+bool PRGPARDrone::smallRangeSearch()
+{
+
+  double small_distance = 0;
+
+  if (home)
+  {
+    small_distance = 0.5;
+  }
+  else
+  {
+    small_distance = 0.5;
+  }
+
+  double command_list[8][4] = { {0, -small_distance, 0, 0}, //go backwards
+      {-small_distance, 0, 0, 0}, //go left
+      {0, small_distance, 0, 0}, //go forward
+      {0, small_distance, 0, 0}, //go forward
+      {small_distance, 0, 0, 0}, //go right
+      {small_distance, 0, 0, 0}, //go right
+      {0, -small_distance, 0, 0}, //go backwards
+      {0, -small_distance, 0, 0}, //go backwards
+      };
+
+  int i = 0;
+  while (detected_flag == false && i < 8)
+  {
+    ROS_INFO("search for tag");
+
+    moveBy(command_list[i][0], command_list[i][1], command_list[i][2], command_list[i][3]);
+
+    ndPause.sleep();
+    ndPause.sleep();
+    ndPause.sleep();
+    ros::spinOnce();
+    i++;
+  }
+
+  if (detected_flag == true)
+  {
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+
 /** Initialise the ARDrone when it starts.
  *  Initialise the PTAM and set the reference point.
  */
@@ -358,15 +418,17 @@ bool PRGPARDrone::initARDrone()
 
   sendFlightCmd("c start");
 
-  sendFlightCmd("c autoInit 500 800 5000 0.5");
+  sendFlightCmd("c takeoff");
 
-  sendFlightCmd("c setMaxControl 0.1"); //set AR.Drone speed limit
+  sendFlightCmd("c autoTakeover 500 800 4000 0.5");
 
-  sendFlightCmd("c setInitialReachDist 0.1");
+  sendFlightCmd("c setMaxControl 1"); //set AR.Drone speed limit
 
-  sendFlightCmd("c setStayWithinDist 0.3");
-  // stay 0.2 seconds
-  sendFlightCmd("c setStayTime 1");
+  sendFlightCmd("c setInitialReachDist 0.2");
+
+  sendFlightCmd("c setStayWithinDist 0.5");
+  // stay 1 seconds
+  sendFlightCmd("c setStayTime 2");
   //PTAM
   sendFlightCmd("c lockScaleFP");
 
@@ -383,47 +445,39 @@ bool PRGPARDrone::initARDrone()
   moveBy(0.0, 0.0, (DESIRED_HEIGHT - altitude), 0.0);
 
   sendFlightCmd("c setReference $POSE$");
-#define EXTRA_HEIGHT 0.6
 
   moveToPose(0.0, 0.0, EXTRA_HEIGHT, 0);
 
   ndPause.sleep();
   ndPause.sleep();
   ndPause.sleep();
+  ndPause.sleep();
+  ndPause.sleep();
+  ndPause.sleep();
 
   ros::spinOnce();
 
-  double command_list[8][4] = { {0, 0.5, EXTRA_HEIGHT, 0}, {0, -0.5, EXTRA_HEIGHT, 0}, {0.5, 0.0, EXTRA_HEIGHT, 0}, {
-      -0.5, 0, EXTRA_HEIGHT, 0},
-                               {0.75, 0.75, EXTRA_HEIGHT, 0}, {0.75, -0.75, EXTRA_HEIGHT, 0}, {-0.75, -0.75,
-                               EXTRA_HEIGHT,
-                                                                                               0},
-                               {-0.75, 0.75, EXTRA_HEIGHT, 0}};
-
-  int i = 0;
-  while (detected_flag == false && i < 8)
+  if (smallRangeSearch() == true)
   {
-    ROS_INFO("search for tag");
-    moveToPose(command_list[i][0], command_list[i][1], command_list[i][2], command_list[i][3]);
-    ndPause.sleep();
-    ndPause.sleep();
-    ndPause.sleep();
-    ros::spinOnce();
-    i++;
-  }
-  if (detected_flag == true)
-  {
-    centeringTag(DESIRED_HEIGHT + EXTRA_HEIGHT);
-    moveBy(0, 0, -EXTRA_HEIGHT, 0);
-    sendFlightCmd("c setReference $POSE$");
-    return true;
+    if (centeringTag(DESIRED_HEIGHT + EXTRA_HEIGHT))
+    {
+      moveBy(0, 0, -EXTRA_HEIGHT, 0);
+      sendFlightCmd("c setReference $POSE$");
+      return true;
+    }
+    else
+    {
+      ROS_INFO("Unable to centre on home tag");
+      return false;
+    }
   }
   else
   {
-    ROS_INFO("Centering failed");
+    ROS_INFO("Tag not detected: Centering failed");
     sendFlightCmd("c land");
     return false;
   }
+  return true;
 }
 
 /** Flight and searching the target tag.
@@ -431,44 +485,67 @@ bool PRGPARDrone::initARDrone()
  */ //Rob# This function name is also a little unclear. SearchForTargetTag
 void PRGPARDrone::flightToSearchTag()
 {
-  double x;
-  double y;
-  double z;
-  double yaw;
+  double command_list_search[48][4] = { {0.8, 0, 0, 0}, {1.6, 0, 0, 0}, {2.4, 0, 0, 0}, /*{2.4, -0.81, 0, 0}, {3.2, -0.81,
+                                                                                                             0, 0},*/
+                                       {3.2, 0, 0, 0}, {3.2, 0.81, 0, 0}, {3.2, 1.62, 0, 0}, {3.2, 2.43, 0, 0}, {3.2,
+                                                                                                                 3.24,
+                                                                                                                 0, 0},
+                                       {3.2, 4.05, 0, 0}, {3.2, 4.86, 0, 0}, {3.2, 5.67, 0, 0}, {4, 5.67, 0, 0}, {4,
+                                                                                                                  4.86,
+                                                                                                                  0, 0},
+                                       {4, 4.05, 0, 0}, {4, 3.24, 0, 0}, {4, 2.43, 0, 0}, {4, 1.62, 0, 0}, {4, 0.81, 0,
+                                                                                                            0},
+                                       {4, 0, 0, 0}, /*{4, -0.81, 0, 0}, {4.8, -0.81, 0, 0}, */{4.8, 0, 0, 0}, {4.8, 0.81,
+                                                                                                            0, 0},
+                                       {4.8, 1.62, 0, 0}, {4.8, 2.43, 0, 0}, {4.8, 3.24, 0, 0}, {4.8, 4.05, 0, 0}, {
+                                           4.8, 4.86, 0, 0},
+                                       {4.8, 5.67, 0, 0}, {5.6, 5.67, 0, 0}, {5.6, 4.86, 0, 0}, {5.6, 4.05, 0, 0}, {
+                                           5.6, 3.26, 0, 0},
+                                       {5.6, 2.43, 0, 0}, {5.6, 1.62, 0, 0}, {5.6, 0.81, 0, 0}, {5.6, 0, 0, 0}, /*{5.6,
+                                                                                                                 -0.81,
+                                                                                                                 0, 0},*/
+                                       {5.6, 0, 0, 0}, {4.8, 0, 0, 0}, {4, 0, 0, 0}, {3.2, 0, 0, 0}, {2.4, 0, 0, 0}, {
+                                           1.6, 0, 0, 0},
+                                       {0.8, 0, 0, 0}, {0, 0, 0, 0}};
+  int i = 0;
+  while (i < 43)
+  {
+    moveToPose(command_list_search[i][0], command_list_search[i][1], command_list_search[i][2],
+               command_list_search[i][3]);
+    i++;
+  }
 
-  //record the home position
+  ros::spinOnce();
+  while (!detected_flag && !home)
+  {
+    ros::spinOnce();
+  }
 
-  //set a point, so the drone can first go out the gantry.
-//  sendFlightCmd("c goto -0.25 -0.25 0.25 0");
+  if (detected_flag == true && home == false)
+  {
+    stopCmdAndHover();
+    ndPause.sleep();
+    ndPause.sleep();
+    ndPause.sleep();
 
-  //record the gantry point position for return home
+    //TODO put small range search in as part of centering tag
 
-  //start searching with a search plan
-//  c = " ";
-//  sprintf(&c[0],"c goto %.2f %.2f %.2f %.2f", x,y,z,yaw); ///sy wrong way for std::string
-//  sendFlightCmd(c);
-
-//  ndPause.sleep();
-  /* commmands can be used
-
-   "c commandstring"
-   autoInit [int moveTimeMS] [int waitTimeMS] [int riseTimeMs] [float initSpeed]
-   autoTakeover [int moveTimeMS] [int waitTimeMS] [int riseTimeMs] [float initSpeed]
-   takeoff
-   start
-   setReference [doube x] [double y] [double z] [double yaw]
-   setReference $POSE$
-   setMaxControl [double cap = 1.0]
-   setInitialReachDist [double dist = 0.2]
-   setStayWithinDist [double dist = 0.5]
-   setStayTime [double seconds = 2.0]
-   lockScaleFP
-   clearCommands
-   goto [double x] [double y] [double z] [double yaw]
-   moveBy [double x] [double y] [double z] [double yaw]
-   moveByRel [double x] [double y] [double z] [double yaw]
-   land
-   */
+    if (centeringTag(DESIRED_HEIGHT))
+    {
+      picture_flag = true;
+      ros::spinOnce();
+    }
+    else
+    {
+      ROS_INFO("Centering tag outside home area");
+      centeringTag(DESIRED_HEIGHT);
+    }
+  }
+  else
+  {
+    //search finished but failed to find tag
+    ROS_INFO("Search complete but tag not found");
+  }
 }
 
 /** Centering the target tag when the target tag is detected.
@@ -476,26 +553,34 @@ void PRGPARDrone::flightToSearchTag()
  */
 bool PRGPARDrone::centeringTag(double current_height)
 {
-  //after tag detected, move to the tag and let tag in the center of the video
 
   //Update tag information
   ros::spinOnce();
-  if (detected_flag == true)
+  if (smallRangeSearch())
+  //if (detected_flag == true)
   {
-    while ((tag_x_coord < 450 || tag_x_coord > 550 || tag_y_coord < 450 || tag_y_coord > 550 || tag_orient > 185
-        || tag_orient < 175) && detected_flag == true)
+//    while ((tag_x_coord < 400 || tag_x_coord > 600 || tag_y_coord < 400 || tag_y_coord > 600 || (home && tag_orient > 183)
+//        || (home && tag_orient < 177)) && detected_flag == true)
+//    {
+    if(detected_flag == true)
     {
-
       //This conversion is for a height of 200cm only
       float x_move = (float)tag_x_coord - 500;
       x_move = x_move * current_height / 1070;
+      //x_move = x_move * current_height / 1200;
       float y_move = (float)tag_y_coord - 500;
       y_move = y_move * current_height / 1940 * -1;
+      //y_move = y_move * current_height / 2300 * -1;
       float angle_to_turn = 0;
 
-      //TODO prevent to drone orienting when above piswarm tag
-      angle_to_turn = 180 - tag_orient;
-
+      if (home == true)
+      {
+        angle_to_turn = 180 - tag_orient;
+      }
+      else
+      {
+        angle_to_turn = 0;
+      }
       //Error handling
       if (x_move > 1 || y_move > 1 || x_move < -1 || y_move < -1 || angle_to_turn > 200 || angle_to_turn < -200)
       {
@@ -510,6 +595,8 @@ bool PRGPARDrone::centeringTag(double current_height)
         ndPause.sleep();
         ndPause.sleep();
         ndPause.sleep();
+        ndPause.sleep();
+        ndPause.sleep();
         ros::spinOnce();
       }
     }
@@ -519,17 +606,19 @@ bool PRGPARDrone::centeringTag(double current_height)
       ROS_INFO("Drone centred above Tag");
       return true;
     }
-
+    else
+    {
+      ROS_INFO("TAG lost during centring. Centring failed");
+      return false;
+    }
   }
-
   else
   {
     ROS_INFO("Tag not detected so unable to centre");
     return false;
   }
+  ROS_WARN("Code should not get here");
   return false;
-  //Check if the tag is detected
-//  centering_flag = true;
 }
 
 /** Fly to the target when the target tag is not detected.
@@ -557,43 +646,12 @@ void PRGPARDrone::flightToTarget()
  */
 void PRGPARDrone::flightToHome()
 {
-
-//  double x;
-//  double y;
-//  double z;
-//  double yaw;
-//
-//  sendFlightCmd("c clearCommands");
-//
-//  //go to the record gantry point first to avoid the collision
-//  sendFlightCmd("c goto -0.25 -0.25 0.25 0");
-//
-//  //go to the record home position
-//  sendFlightCmd("c goto -0.25 -0.25 0.25 0");
-//
-////  c = " ";
-////  sprintf(&c[0],"c goto %.2f %.2f %.2f %.2f", x,y,z,yaw); ///sy wrong way for std::string
-////  sendFlightCmd();
-//
-//  //if you need tag detection, do it here. you can change to the one you want
-//  home_tag_det = true;//open the tag detection for home stage
-//  if(0 == current_tag)
-//  {
-//  	  //do your work here.
-//  }
-//  else
-//  {
-//    setTargetTag();//change the tag
-//  	//do your work here
-//  }
-//
-//  //for emergency, use fuction land() to land the ardrone directly;
-//  sendFlightCmd("c land");
-//
+  ros::spinOnce();
+  ROS_INFO("Current position is : %0.2f, %0.2f", currentPos_x, currentPos_y);
 
 }
 
-/** The main running loop for the prgp_ardrone package.
+/** The mai n running loop for the prgp_ardrone package.
  *  Getting the command from Pi-Swarm to start the AR.Drone. Then flight to the target. centering
  *  the target, taking the picture, returning home and send command to return the Pi-Swarm. All the
  *  functions are organised by the flags (true and false).
@@ -605,73 +663,38 @@ void PRGPARDrone::run()
 
   if (ros::ok())
   {
-//while(1)
-// ROS_DEBUG("aaaa");
-    initARDrone();
+    if(initARDrone())
+    {
+      //search fly path function
+      flightToSearchTag();
 
-//    std::string commandArray2[22] = {"c goto 0.0 -0.75 0.0 0.0", //1
-//        "c goto 0.0 -1.5 0.0 0.0", //2
-//        "c goto -0.75 -1.5 0.0 0.0", //3
-//        "c goto -0.75 -0.75 0.0 0.0", //4
-//        "c goto -1.5 -0.75 0.0 0.0", //5
-//        "c goto -1.5 0.0 0.0 0.0", //6
-//        "c goto -1.5 0.75 0.0 0.0", //7
-//        "c goto -1.5 1.5 0.0 0.0", //8
-//        "c goto -0.75 1.5 0.0 0.0", //9
-//        "c goto 0.0 1.5 0.0 0.0", //10
-//        "c goto 0.75 1.5 0.0 0.0", //11
-//        "c goto 1.5 1.5 0.0 0.0", //12
-//        "c goto 1.5 0.75 0.0 0.0", //13
-//        "c goto 1.5 0.0 0.0 0.0", //14
-//        "c goto 1.5 -0.75 0.0 0.0", //15
-//        "c goto 1.5 -1.5 0.0 0.0", //16
-//        "c goto 0.75 -1.5 0.0 0.0", //17
-//        "c goto 0.0 -1.5 0.0 0.0", //18
-//        "c goto 0.75 0.0 0.0 0.0", //19
-//        "c goto 0.0 0.75 0.0 0.0", //20
-//        "c goto -0.75 0.0 0.0 0.0", //21
-//        "c goto 0.0 0.0 0.0 0.0" //22
-//        };
-//
-//    i = 0;
-//    while (reference_set == true && i < 22)
-//    {
-//      sendFlightCmd(commandArray2[i]);
-//      ndPause.sleep();
-//      ros::spinOnce();
-//      i++;
-//    }
-    ndPause.sleep();
-    ndPause.sleep();
-    ndPause.sleep();
-    ndPause.sleep();
-    ndPause.sleep();
-    ndPause.sleep();
-    sendFlightCmd("c land");
-    ndPause.sleep();
-    ndPause.sleep();
-    ndPause.sleep();
-    ndPause.sleep();
-    ndPause.sleep();
-    ndPause.sleep();
-//      std::cout << "**** executing_command_flag" << executing_command_flag << " after command sent" << std::endl;
-//      ros::spinOnce();
-//      std::cout << "**** executing_command_flag" << executing_command_flag << " after spinOnce" << std::endl;
-//      executing_command_flag = true;
-//      std::cout << "**** executing_command_flag" << executing_command_flag << " after reset" << std::endl;
+      flightToHome();
 
+      ndPause.sleep();
+      ndPause.sleep();
+      ndPause.sleep();
+      ndPause.sleep();
+      ndPause.sleep();
+      sendFlightCmd("c land");
+      ndPause.sleep();
+      ndPause.sleep();
+
+      ndPause.sleep();
+      ndPause.sleep();
+      ndPause.sleep();
+      ndPause.sleep();
+      //      std::cout << "**** executing_command_flag" << executing_command_flag << " after command sent" << std::endl;
+      //      ros::spinOnce();
+      //      std::cout << "**** executing_command_flag" << executing_command_flag << " after spinOnce" << std::endl;
+      //      executing_command_flag = true;
+      //      std::cout << "**** executing_command_flag" << executing_command_flag << " after reset" << std::endl;
+    }
+    else
+    {
+      ROS_INFO("Drone initialisation failed");
+      sendFlightCmd("c land");
+    }
   }
-
-//    while(executing_command_flag == true)
-//    {
-//      ROS_INFO("Initialising");
-//      ros::spinOnce();
-//    }
-//
-//    ROS_INFO("Initcomplete");
-//    c = "c land";
-//    sendFlightCmd();
-//    ros::spinOnce();
 }
 //  while(ros::ok())
 //  {
