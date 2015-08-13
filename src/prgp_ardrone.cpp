@@ -70,6 +70,8 @@ PRGPARDrone::PRGPARDrone()
   tagSub = ndh_.subscribe("/ardrone/navdata", 1, &PRGPARDrone::acquireTagResultCb, this);
   currentStateSub = ndh_.subscribe("/ardrone/predictedPose", 1, &PRGPARDrone::acquireCurrentStateCb, this);
   imgSub = ndh_.subscribe("/ardrone/image_raw", 10, &PRGPARDrone::takePicCb, this);
+  image_cmd_pub = ndh_.advertise<std_msgs::Empty>("image_test", 10, this); ///
+  image_cmd_sub = ndh_.subscribe("image_test", 10, &PRGPARDrone::imageCb, this); ///
 
   //Service client
   toggleCamSrv = ndh_.serviceClient<std_srvs::Empty>("/ardrone/togglecam", 1);
@@ -102,6 +104,10 @@ PRGPARDrone::~PRGPARDrone(void)
   delete (window);
 }
 
+void PRGPARDrone::imageCb(const std_msgs::Empty msg) ///
+{
+  picture_flag = true;
+} ///
 /** Callback function for piswarm_com topic to get the command from the Pi-Swarm.
  *  Pi-Swarm send the recruiting command to the radio modem, the radio modem transfer the command to
  *  prgp_piswarmcom package. Then the prgp_piswarmcom package publish the command to the piswarm_com
@@ -144,16 +150,20 @@ void PRGPARDrone::takePicCb(const sensor_msgs::ImageConstPtr img)
     CVD::Image<CVD::Rgb<CVD::byte> > new_image;
     picture_flag = false;
     cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::RGB8);
+    ROS_INFO("Before mutex");
     pthread_mutex_lock(&send_CS);
     if (new_image.size().x != img->width || new_image.size().y != img->height)
       new_image.resize(CVD::ImageRef(img->width, img->height));
     memcpy(new_image.data(), cv_ptr->image.data, img->width * img->height * 3); ///sy cpy the image to mimFrameBW.data()
     pthread_mutex_unlock(&send_CS);
+    ROS_INFO("After mutex");
     image.open("output.bmp", std::fstream::out);
     CVD::img_save(new_image, image, CVD::ImageType::BMP);
+    ROS_INFO("Before window");
     if (window != NULL)
       delete (window);
     window = new CVD::VideoDisplay(new_image.size());
+    ROS_INFO("After window");
     glDrawPixels(new_image);
     glFlush();
     image.close();
@@ -197,8 +207,28 @@ void PRGPARDrone::acquireTagResultCb(const ardrone_autonomy::Navdata &navdataRec
       switch (target_tag)
       {
         case 0:
+          j = 255;
+          for (i = 0; i < navdataReceived.tags_count; i++)
+          {
+            if (navdataReceived.tags_type[i] == tags[0]) ///sy TODO check the output of tags_type and target_tag
+            {
+              j = i; ///sy record the last target_tag in the array
+            }
+          }
+          if (j < 255)
+          {
+            detected_flag = true;
+            tag_x_coord = navdataReceived.tags_xc[j];
+            tag_y_coord = navdataReceived.tags_yc[j];
+            tag_orient = navdataReceived.tags_orientation[j];
+          }
+          else
+          {
+            detected_flag = false;
+          }
           break;
         case 1:
+          j = 255;
           for (i = 0; i < navdataReceived.tags_count; i++)
           {
             if (navdataReceived.tags_type[i] == tags[1]) ///sy TODO check the output of tags_type and target_tag
@@ -237,19 +267,20 @@ void PRGPARDrone::acquireTagResultCb(const ardrone_autonomy::Navdata &navdataRec
  */
 void PRGPARDrone::acquireCurrentStateCb(const tum_ardrone::filter_state &currentState)
 {
-  currentPos_x = currentState.x + offset_x;
-  currentPos_y = currentState.y + offset_y;
-
+  currentPos_x = currentState.x - offset_x;
+  currentPos_y = currentState.y - offset_y;
+  //ROS_INFO("x:%.2f(%.2f) y:%.2f (%.2f)", currentPos_x,offset_x,currentPos_y,offset_y);
   if (fabs(currentPos_x) > 1.6 || fabs(currentPos_y) > 1.6)
   {
-    ROS_INFO("outside home x:%.2f y:%.2f", currentPos_x, currentPos_y);
+    //ROS_INFO("outside home x:%.2f y:%.2f", currentPos_x, currentPos_y);
     home = false;
   }
   else
   {
     home = true;
+    if (detected_flag)
+      ROS_INFO("HOME AND DETECTED");
   }
-
   if (currentState.ptamState == currentState.PTAM_LOST)
   {
     stopCmdAndHover();
@@ -336,8 +367,8 @@ void PRGPARDrone::stopCmdAndHover()
   double tag_y = currentPos_y;
   stopCmdAndHoverSrv.call(stopCmd_srvs);
   ROS_INFO("Command is cleared.");
-  moveToPose(tag_x, tag_y, DESIRED_HEIGHT, 0);
-  ros::spinOnce();
+  ndPause.sleep();
+  moveToPose(tag_x, tag_y, 0, 0);
 }
 
 /** Moving ARDrone by a distance and angle from its current pose.
@@ -449,8 +480,9 @@ bool PRGPARDrone::initARDrone()
   sendFlightCmd("c lockScaleFP");
 
   sendFlightCmd("c setReference $POSE$");
-  offset_x = currentPos_x;
-  offset_y = currentPos_y;
+  ros::spinOnce();
+  offset_x = currentPos_x + offset_x;
+  offset_y = currentPos_y + offset_y;
 
   ndPause.sleep();
   ndPause.sleep();
@@ -462,10 +494,9 @@ bool PRGPARDrone::initARDrone()
   moveBy(0.0, 0.0, (DESIRED_HEIGHT - altitude), 0.0);
 
   sendFlightCmd("c setReference $POSE$");
-  offset_x = currentPos_x;
-  offset_y = currentPos_y;
   ros::spinOnce();
-  ROS_INFO("current position after offset: %f %f", currentPos_x, currentPos_y);
+  offset_x = currentPos_x + offset_x;
+  offset_y = currentPos_y + offset_y;
   moveToPose(0.0, 0.0, EXTRA_HEIGHT, 0);
 
   ndPause.sleep();
@@ -480,9 +511,10 @@ bool PRGPARDrone::initARDrone()
   if (centeringTag(DESIRED_HEIGHT + EXTRA_HEIGHT))
   {
     moveBy(0, 0, -EXTRA_HEIGHT, 0);
+    ros::spinOnce();
     sendFlightCmd("c setReference $POSE$");
-    offset_x = currentPos_x;
-    offset_y = currentPos_y;
+    offset_x = currentPos_x + offset_x;
+    offset_y = currentPos_y + offset_y;
     return true;
   }
   else
@@ -499,24 +531,30 @@ bool PRGPARDrone::initARDrone()
 bool PRGPARDrone::searchForTargetTag()
 {
 #undef NUM_OF_CMD
-#define NUM_OF_CMD 43
-  double command_list_search[NUM_OF_CMD][4] = { {0.8, 0, 0, 0}, {1.6, 0, 0, 0}, {2.4, 0, 0, 0}, /*{2.4, -0.81, 0, 0}, {3.2, -0.81,
-   0, 0},*/
-                                               {3.2, 0, 0, 0}, {3.2, 0.81, 0, 0}, {3.2, 1.62, 0, 0}, {3.2, 2.43, 0, 0},
-                                               {3.2, 3.24, 0, 0}, {3.2, 4.05, 0, 0}, {3.2, 4.86, 0, 0},
-                                               {3.2, 5.67, 0, 0}, {4, 5.67, 0, 0}, {4, 4.86, 0, 0}, {4, 4.05, 0, 0}, {
-                                                   4, 3.24, 0, 0},
-                                               {4, 2.43, 0, 0}, {4, 1.62, 0, 0}, {4, 0.81, 0, 0}, {4, 0, 0, 0}, /*{4, -0.81, 0, 0}, {4.8, -0.81, 0, 0}, */
-                                               {4.8, 0, 0, 0}, {4.8, 0.81, 0, 0}, {4.8, 1.62, 0, 0}, {4.8, 2.43, 0, 0},
-                                               {4.8, 3.24, 0, 0}, {4.8, 4.05, 0, 0}, {4.8, 4.86, 0, 0},
-                                               {4.8, 5.67, 0, 0}, {5.6, 5.67, 0, 0}, {5.6, 4.86, 0, 0},
-                                               {5.6, 4.05, 0, 0}, {5.6, 3.26, 0, 0}, {5.6, 2.43, 0, 0},
-                                               {5.6, 1.62, 0, 0}, {5.6, 0.81, 0, 0}, {5.6, 0, 0, 0}, /*{5.6,
-                                                -0.81,
-                                                0, 0},*/
-                                               {5.6, 0, 0, 0}, {4.8, 0, 0, 0}, {4, 0, 0, 0}, {3.2, 0, 0, 0}, {2.4, 0, 0,
-                                                                                                              0},
-                                               {1.6, 0, 0, 0}, {0.8, 0, 0, 0}, {0, 0, 0, 0}};
+#define NUM_OF_CMD 5
+//  double command_list_search[NUM_OF_CMD][4] = { {0.8, 0, 0, 0}, {1.6, 0, 0, 0}, {2.4, 0, 0, 0}, /*{2.4, -0.81, 0, 0}, {3.2, -0.81,
+//   0, 0},*/
+//                                               {3.2, 0, 0, 0}, {3.2, 0.81, 0, 0}, {3.2, 1.62, 0, 0}, {3.2, 2.43, 0, 0},
+//                                               {3.2, 3.24, 0, 0}, {3.2, 4.05, 0, 0}, {3.2, 4.86, 0, 0},
+//                                               {3.2, 5.67, 0, 0}, {4, 5.67, 0, 0}, {4, 4.86, 0, 0}, {4, 4.05, 0, 0}, {
+//                                                   4, 3.24, 0, 0},
+//                                               {4, 2.43, 0, 0}, {4, 1.62, 0, 0}, {4, 0.81, 0, 0}, {4, 0, 0, 0}, /*{4, -0.81, 0, 0}, {4.8, -0.81, 0, 0}, */
+//                                               {4.8, 0, 0, 0}, {4.8, 0.81, 0, 0}, {4.8, 1.62, 0, 0}, {4.8, 2.43, 0, 0},
+//                                               {4.8, 3.24, 0, 0}, {4.8, 4.05, 0, 0}, {4.8, 4.86, 0, 0},
+//                                               {4.8, 5.67, 0, 0}, {5.6, 5.67, 0, 0}, {5.6, 4.86, 0, 0},
+//                                               {5.6, 4.05, 0, 0}, {5.6, 3.26, 0, 0}, {5.6, 2.43, 0, 0},
+//                                               {5.6, 1.62, 0, 0}, {5.6, 0.81, 0, 0}, {5.6, 0, 0, 0}, /*{5.6,
+//                                                -0.81,
+//                                                0, 0},*/
+//                                               {5.6, 0, 0, 0}, {4.8, 0, 0, 0}, {4, 0, 0, 0}, {3.2, 0, 0, 0}, {2.4, 0, 0,
+//                                                                                                              0},
+//                                               {1.6, 0, 0, 0}, {0.8, 0, 0, 0}, {0, 0, 0, 0}};
+  double command_list_search[NUM_OF_CMD][4] = { {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0},
+                                               {-2, 0, 0, 0}, /* {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0},
+   {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0},
+   {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0},
+   {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}
+   */};
   int i = 0;
   while (i < NUM_OF_CMD)
   {
@@ -524,19 +562,26 @@ bool PRGPARDrone::searchForTargetTag()
                command_list_search[i][3]);
     i++;
   }
+  ros::spinOnce();
   while (home) ///sy wait till drone is outside of home
+  {
+    ROS_INFO("Drone is at home");
     ros::spinOnce();
+  }
   while (!detected_flag && !home) ///sy wait till tag is detected or come back to home
   {
+    ROS_INFO("Drone is outside home searching");
     ros::spinOnce();
   }
 
   if (detected_flag && !home)
   {
+    ROS_INFO("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
     stopCmdAndHover();
     ndPause.sleep(); //TODO
     ndPause.sleep();
     ndPause.sleep();
+    ros::spinOnce();
 
     if (centeringTag(DESIRED_HEIGHT))
     {
@@ -623,7 +668,7 @@ bool PRGPARDrone::centeringTag(double current_height)
  */
 void PRGPARDrone::flightToHome() //TODO
 {
-  ROS_INFO("Current position is : %0.2f, %0.2f", currentPos_x, currentPos_y);
+  ROS_INFO("Current position is : %0.2f, %0.2f", (currentPos_x), (currentPos_y));
 }
 
 /** The main running loop for the prgp_ardrone package.
@@ -642,16 +687,31 @@ void PRGPARDrone::run()
       sendFlightCmd("c land");
       return;
     }
-    while (1)
-      ros::spinOnce();
-    searchForTargetTag(); ///sy exit till centred or search failed
+    setTargetTag();
+    if(!searchForTargetTag()) ///sy exit till centred or search failed
+    {
+      ROS_INFO("Drone search failed");
+      sendFlightCmd("c land");
+      return;
+    }
     toggleCam();
-    ros::spinOnce(); ///sy TODO discuss ros::spinOnce();
+    ndPause.sleep();
+//    ros::spinOnce(); //
     picture_flag = true;
-    ros::spinOnce(); ///sy takePicCb
+    if(picture_flag)
+    {
+      ROS_INFO("picture flag changed");
+
+      ros::spinOnce();
+    }
+//    while(image_saved == false){
+//      ros::spinOnce();
+//    }
+     ///sy takePicCb
+    ndPause.sleep();
     sendCmdToPiswarm(); ///sy piswarm back
     toggleCam();
-    ros::spinOnce();
+    while(1);
     flightToHome(); ///sy TODO make sure method returns only when it's home
     land(); ///sy TODO "c land"?
   }

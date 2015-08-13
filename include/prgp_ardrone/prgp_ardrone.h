@@ -97,6 +97,8 @@ private:
   ros::Subscriber tagSub; /**< Subscriber to get the navdata, especially the tag result by /ardrone/navdata */
   ros::Subscriber currentStateSub; /**< Subscriber to get the current state of the AR.Drone */
   ros::Subscriber imgSub; /**< Subscriber to get the image from camera by /ardrone/image_raw */
+  ros::Subscriber image_cmd_sub; ///
+  ros::Publisher image_cmd_pub; ///
 
   //Rob#
   ros::Subscriber cmdCompleteSub;
@@ -171,6 +173,7 @@ public:
   void takePicCb(const sensor_msgs::ImageConstPtr img);
   void acquireTagResultCb(const ardrone_autonomy::Navdata &navdataReceived);
   void acquireCurrentStateCb(const tum_ardrone::filter_state &currentState);
+  void imageCb(const std_msgs::Empty msg);///
 
   //functions
   void sendCmdToPiswarm();
