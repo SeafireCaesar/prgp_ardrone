@@ -57,7 +57,9 @@
 #include "tum_ardrone/filter_state.h"
 
 ///sy   taking picture headers ########################
-#include "cvd/image_io.h"
+#include <cvd/image_io.h>
+#include <cvd/videodisplay.h>
+#include <cvd/gl_helpers.h>
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
 #include <iostream>
@@ -71,10 +73,6 @@
 #include <stdio.h>
 #include <algorithm>
 #include <pthread.h>
-
-#define CLASS_STYLE /**< Macro to open the class style code */
-
-#ifdef CLASS_STYLE
 
 #define DESIRED_HEIGHT 0.8
 #define EXTRA_HEIGHT 0.5
@@ -121,6 +119,7 @@ private:
   geometry_msgs::Twist velCmd; /**< Message for the cmd_vel topic to AR.Drone */
 
   static pthread_mutex_t send_CS;
+  static pthread_mutex_t pic_mt;
 
   //variables
   double currentPos_x;
@@ -138,8 +137,12 @@ private:
   bool home_detected_flag; /**< The value will be true when tag detected at home stage */
   bool executing_command_flag; //Rob# /**< this value will be true whilst the drone is executing a tum command, it will be set to false after a callback */
   bool home;
+  bool image_saved;
+  CVD::VideoDisplay * window = NULL;
+  uint32_t tags[4] = {65536, 65536, 65536, 0};
+
   uint16_t current_tag; /**< change when setTargetTag() is used, 0 for black_roundel, 1 for COCARDE */
-  uint16_t tag_type; /**< 0 for black_roundel, 1 for COCARDE, 2 for mixed tag type (current_tag is 0) */
+  uint16_t target_tag; /**< 0 for black_roundel, 1 for COCARDE, 2 for mixed tag type (current_tag is 0) */
   bool reference_set;
   //Rob#
   float altitude;
@@ -180,33 +183,12 @@ public:
   bool initARDrone();
   bool smallRangeSearch();
   bool centeringTag(double current_height);
-  void flightToSearchTag();
+  bool searchForTargetTag();
   void flightToTarget();
   void flightToHome();
   void moveToPose(double x, double y, double z, double yaw);
   void stopCmdAndHover();
   void moveBy(double x, double y, double z, double yaw);
 };
-
-#else //else for CLASS_STYLE
-
-std_msgs::String s;
-std::string c;
-
-std_msgs::String s_Pi;
-std::string c_Pi;
-
-std_srvs::Empty toggle_srvs;
-std_srvs::Empty detect_srvs;
-geometry_msgs::Twist velCmd;
-
-static pthread_mutex_t send_CS = PTHREAD_MUTEX_INITIALIZER;
-
-float currentPos_x;
-float currentPos_y;
-
-bool tag_detected = false;
-
-#endif//end of CLASS_STYLE
 
 #endif /* PRGP_ARDRONE_INCLUDE_PRGP_ARDRONE_H_ */
