@@ -95,6 +95,16 @@ PRGPARDrone::PRGPARDrone()
   reference_set = false;
   home = true;
   image_saved = false;
+
+  altitude = 0; //Initialise the private variable in the Class definition will show warning.
+  tag_x_coord = 0;
+  tag_y_coord = 0;
+  tag_orient = 0;
+  tag_x_coord_h = 0;
+  tag_y_coord_h = 0;
+  tag_orient_h = 0;
+  offset_x = 0;
+  offset_y = 0;
 }
 /** Class destructor.
  *
@@ -118,19 +128,19 @@ void PRGPARDrone::piswarmCmdRevCb(const std_msgs::StringConstPtr str)
 
   ROS_INFO_STREAM(*str);
   ROS_INFO("%s\n", str->data.c_str());
-  if (str->data.c_str() == "r")
+  if (str->data == "r")
   {
     //default is used the black_roundel tag
     start_flag = true;
     target_tag = 0;
   }
-  else if (str->data.c_str() == "c")
+  else if (str->data == "c")
   {
     setTargetTag(); //change to COCARDE tag
     start_flag = true;
     target_tag = 1;
   }
-  else if (str->data.c_str() == "m")
+  else if (str->data == "m")
   {
     //mix tag, two black_roundel together, need not change the tag
     start_flag = true;
@@ -178,87 +188,190 @@ void PRGPARDrone::takePicCb(const sensor_msgs::ImageConstPtr img)
  */
 void PRGPARDrone::acquireTagResultCb(const ardrone_autonomy::Navdata &navdataReceived)
 {
+  uint8_t i = 0;
+  uint8_t j = 0;
+  uint32_t x_coord[4] = {0, 0, 0, 0};
+  uint32_t y_coord[4] = {0, 0, 0, 0};
+  uint32_t width[4] = {0, 0, 0, 0};
+  float orient[4] = {0, 0, 0, 0};
+
+  detected_flag = false;
+  detected_flag_h = false;
+
   altitude = navdataReceived.altd / 1000.0;
+
   if (navdataReceived.tags_count > 0)
   {
     if (home)
     {
-      uint8_t i = 0, j = 255;
       for (i = 0; i < navdataReceived.tags_count; i++)
       {
-        if (navdataReceived.tags_type[i] == tags[0])
-          j = i;
-      }
-      if (j < 255)
-      {
-        detected_flag = true;
-        tag_x_coord = navdataReceived.tags_xc[j];
-        tag_y_coord = navdataReceived.tags_yc[j];
-        tag_orient = navdataReceived.tags_orientation[j];
-      }
-      else
-      {
-        detected_flag = false;
+        if (navdataReceived.tags_type[i] == tag_v)
+        {
+          detected_flag = true;
+          tag_x_coord = navdataReceived.tags_xc[i];
+          tag_y_coord = navdataReceived.tags_yc[i];
+          tag_orient = navdataReceived.tags_orientation[i];
+        }
+
+        if (navdataReceived.tags_type[i] == tag_h)
+        {
+          detected_flag_h = true;
+          tag_x_coord_h = navdataReceived.tags_xc[i];
+          tag_y_coord_h = navdataReceived.tags_yc[i];
+          tag_orient_h = navdataReceived.tags_orientation[i];
+        }
       }
     }
     else
     {
-      uint8_t i = 0, j = 255;
+      j = 0;
+      for (i = 0; i < navdataReceived.tags_count; i++)
+      {
+        if (navdataReceived.tags_type[i] == tag_v)
+        {
+          x_coord[j] = navdataReceived.tags_xc[i];
+          y_coord[j] = navdataReceived.tags_yc[i];
+          orient[j] = navdataReceived.tags_orientation[i];
+          width[j] = navdataReceived.tags_width[i];
+          j++;
+        }
+      }
       switch (target_tag)
       {
         case 0:
-          j = 255;
-          for (i = 0; i < navdataReceived.tags_count; i++)
+
+          if (j == 1)
           {
-            if (navdataReceived.tags_type[i] == tags[0]) ///sy TODO check the output of tags_type and target_tag
+            if (width[0] > 45)
             {
-              j = i; ///sy record the last target_tag in the array
+              detected_flag = true;
+              tag_x_coord = x_coord[0];
+              tag_y_coord = y_coord[0];
+              tag_orient = orient[0];
             }
           }
-          if (j < 255)
+          else if (j == 2)
           {
-            detected_flag = true;
-            tag_x_coord = navdataReceived.tags_xc[j];
-            tag_y_coord = navdataReceived.tags_yc[j];
-            tag_orient = navdataReceived.tags_orientation[j];
+
+            if ((width[1] - width[0]) > 9)
+            {
+              detected_flag = true;
+              tag_x_coord = x_coord[1];
+              tag_y_coord = y_coord[1];
+              tag_orient = orient[1];
+            }
+            else if ((width[0] - width[1]) > 9)
+            {
+              detected_flag = true;
+              tag_x_coord = x_coord[0];
+              tag_y_coord = y_coord[0];
+              tag_orient = orient[0];
+            }
+          }
+          else if (j == 3)
+          {
+
+            if ((width[0] > width[1]) && (width[0] > width[2]))
+            {
+              detected_flag = true;
+              tag_x_coord = x_coord[0];
+              tag_y_coord = y_coord[0];
+              tag_orient = orient[0];
+            }
+            if ((width[1] > width[0]) && (width[1] > width[2]))
+            {
+              detected_flag = true;
+              tag_x_coord = x_coord[1];
+              tag_y_coord = y_coord[1];
+              tag_orient = orient[1];
+            }
+            if ((width[2] > width[0]) && (width[2] > width[1]))
+            {
+              detected_flag = true;
+              tag_x_coord = x_coord[2];
+              tag_y_coord = y_coord[2];
+              tag_orient = orient[2];
+            }
           }
           else
           {
-            detected_flag = false;
+            ROS_INFO("Tag Number is error!");
           }
+
           break;
         case 1:
-          j = 255;
-          for (i = 0; i < navdataReceived.tags_count; i++)
-          {
-            if (navdataReceived.tags_type[i] == tags[1]) ///sy TODO check the output of tags_type and target_tag
-            {
-              j = i; ///sy record the last target_tag in the array           }
-            }
-          }
-          if (j < 255)
+
+          if (j == 1)
           {
             detected_flag = true;
-            tag_x_coord = navdataReceived.tags_xc[j];
-            tag_y_coord = navdataReceived.tags_yc[j];
-            tag_orient = navdataReceived.tags_orientation[j];
+            tag_x_coord = x_coord[0];
+            tag_y_coord = y_coord[0];
+            tag_orient = orient[0];
           }
           else
           {
-            detected_flag = false;
+            ROS_INFO("Tag Number is error!");
           }
           break;
         case 2:
+          if (j == 1)
+          {
+            if (width[0] < 40)
+            {
+              detected_flag = true;
+              tag_x_coord = x_coord[0];
+              tag_y_coord = y_coord[0];
+              tag_orient = orient[0];
+            }
+          }
+          else if (j == 2)
+          {
+
+            if ((width[1] - width[0]) < 5)
+            {
+              detected_flag = true;
+              tag_x_coord = x_coord[1];
+              tag_y_coord = y_coord[1];
+              tag_orient = orient[1];
+            }
+          }
+          else if (j == 3)
+          {
+
+            if ((width[0] > width[1]) && (width[0] > width[2]))
+            {
+              detected_flag = true;
+              tag_x_coord = x_coord[1];
+              tag_y_coord = y_coord[1];
+              tag_orient = orient[1];
+            }
+            if ((width[1] > width[0]) && (width[1] > width[2]))
+            {
+              detected_flag = true;
+              tag_x_coord = x_coord[0];
+              tag_y_coord = y_coord[0];
+              tag_orient = orient[0];
+            }
+            if ((width[2] > width[0]) && (width[2] > width[1]))
+            {
+              detected_flag = true;
+              tag_x_coord = x_coord[0];
+              tag_y_coord = y_coord[0];
+              tag_orient = orient[0];
+            }
+          }
+          else
+          {
+            ROS_INFO("Tag Number is error!");
+          }
           break;
         default:
           break;
       }
     }
   }
-  else
-  {
-    detected_flag = false;
-  }
+  ROS_INFO("TagResultCb is completed.");
 }
 
 /** Callback function for /ardrone/predictedPose to get the current state of AR.Drone.
@@ -688,7 +801,7 @@ void PRGPARDrone::run()
       return;
     }
     setTargetTag();
-    if(!searchForTargetTag()) ///sy exit till centred or search failed
+    if (!searchForTargetTag()) ///sy exit till centred or search failed
     {
       ROS_INFO("Drone search failed");
       sendFlightCmd("c land");
@@ -698,7 +811,7 @@ void PRGPARDrone::run()
     ndPause.sleep();
 //    ros::spinOnce(); //
     picture_flag = true;
-    if(picture_flag)
+    if (picture_flag)
     {
       ROS_INFO("picture flag changed");
 
@@ -707,11 +820,12 @@ void PRGPARDrone::run()
 //    while(image_saved == false){
 //      ros::spinOnce();
 //    }
-     ///sy takePicCb
+    ///sy takePicCb
     ndPause.sleep();
     sendCmdToPiswarm(); ///sy piswarm back
     toggleCam();
-    while(1);
+    while (1)
+      ;
     flightToHome(); ///sy TODO make sure method returns only when it's home
     land(); ///sy TODO "c land"?
   }
