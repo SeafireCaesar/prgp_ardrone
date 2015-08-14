@@ -130,6 +130,7 @@ private:
   bool initialising_PTAM_flag; //Rob# /**The value will be true whilst drone is taking off and performing initial movements to configure PTAM and locate home tag */
   bool aligning_to_home_tag; //Rob# /**The value will be true until the drone has centered above home tag and set new reference */
   bool detected_flag; /**< The value will be true when AR.Drone detect the target tag during the flight */
+  bool detected_flag_h; /**< The value will be true when AR.Drone detect the target tag from the front camera */
   bool centering_flag; /**< The value will be true before AR.Drone centering the tag */
   bool picture_flag; /**< The value will be true before taking the picture */ //Rob# this name is not too clear. before_picture_flag would be better
   bool return_flag; /**< The value will be true before returning the Pi-Swarm and the Drone back home*/ //Rob# this name is not too clear. before_return_flag would be better
@@ -141,18 +142,24 @@ private:
   bool home;
   bool image_saved;
   CVD::VideoDisplay * window = NULL;
-  uint32_t tags[4] = {65536, 65536, 65536, 0};
+  const static uint32_t tag_v = 65536;
+  const static uint32_t tag_h = 0;
 
   uint16_t current_tag; /**< change when setTargetTag() is used, 0 for black_roundel, 1 for COCARDE */
   uint16_t target_tag; /**< 0 for black_roundel, 1 for COCARDE, 2 for mixed tag type (current_tag is 0) */
   bool reference_set;
-  //Rob#
+  //Rob# **liu, Initialise the private variable here will be show warning.
   float altitude;
-  uint32_t tag_x_coord = 0;
-  uint32_t tag_y_coord = 0;
-  float tag_orient = 0;
-  float offset_x = 0;
-  float offset_y = 0;
+  uint32_t tag_x_coord;
+  uint32_t tag_y_coord;
+  float tag_orient;
+
+  uint32_t tag_x_coord_h;
+  uint32_t tag_y_coord_h;
+  float tag_orient_h;
+
+  float offset_x;
+  float offset_y;
 
   typedef struct drone_pose
   {
@@ -173,7 +180,7 @@ public:
   void takePicCb(const sensor_msgs::ImageConstPtr img);
   void acquireTagResultCb(const ardrone_autonomy::Navdata &navdataReceived);
   void acquireCurrentStateCb(const tum_ardrone::filter_state &currentState);
-  void imageCb(const std_msgs::Empty msg);///
+  void imageCb(const std_msgs::Empty msg); ///
 
   //functions
   void sendCmdToPiswarm();
