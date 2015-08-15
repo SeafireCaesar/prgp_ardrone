@@ -47,7 +47,7 @@
 pthread_mutex_t PRGPARDrone::send_CS = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t PRGPARDrone::pic_mt = PTHREAD_MUTEX_INITIALIZER;
 
-/** Initialise the variables and paramaters.
+/** Initialise the variables and parameters.
  *  Initialise the ROS time, ROS Duration, Publishers, Subscribers, Service clients, Flags and so on.
  */
 PRGPARDrone::PRGPARDrone()
@@ -701,7 +701,6 @@ void PRGPARDrone::run()
     if(picture_flag)
     {
       ROS_INFO("picture flag changed");
-
       ros::spinOnce();
     }
 //    while(image_saved == false){
