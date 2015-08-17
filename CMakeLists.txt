@@ -106,9 +106,11 @@ include_directories(
 # set header ans source files
 set(ARDRONE_SOURCE_FILES       
   src/prgp_ardrone.cpp
+  src/image.cpp
 )
 set(ARDRONE_HEADER_FILES    
   include/prgp_ardrone/prgp_ardrone.h
+  include/prgp_ardrone/image.h
 )
 
 # set required libs and headers

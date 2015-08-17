@@ -41,7 +41,7 @@
  *  @date 24 July 2015
  *  @copyright BSD License.
  */
-
+#include "prgp_ardrone/image.h"
 #include <prgp_ardrone/prgp_ardrone.h>
 
 pthread_mutex_t PRGPARDrone::send_CS = PTHREAD_MUTEX_INITIALIZER;
@@ -111,7 +111,10 @@ PRGPARDrone::PRGPARDrone()
  */
 PRGPARDrone::~PRGPARDrone(void)
 {
-  delete (window);
+//  if (window != NULL)
+//    delete (window);
+  if (image != NULL)
+    delete (image);
 }
 
 void PRGPARDrone::imageCb(const std_msgs::Empty msg) ///
@@ -154,32 +157,42 @@ void PRGPARDrone::piswarmCmdRevCb(const std_msgs::StringConstPtr str)
  */
 void PRGPARDrone::takePicCb(const sensor_msgs::ImageConstPtr img)
 {
-  if (picture_flag == true) ///sy TODO change the flag
+  std::cout << "bang!" << std::endl;
+  if (picture_flag == true)
   {
-    std::fstream image;
-    CVD::Image<CVD::Rgb<CVD::byte> > new_image;
-    picture_flag = false;
-    cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::RGB8);
-    ROS_INFO("Before mutex");
-    pthread_mutex_lock(&send_CS);
-    if (new_image.size().x != img->width || new_image.size().y != img->height)
-      new_image.resize(CVD::ImageRef(img->width, img->height));
-    memcpy(new_image.data(), cv_ptr->image.data, img->width * img->height * 3); ///sy cpy the image to mimFrameBW.data()
-    pthread_mutex_unlock(&send_CS);
-    ROS_INFO("After mutex");
-    image.open("output.bmp", std::fstream::out);
-    CVD::img_save(new_image, image, CVD::ImageType::BMP);
-    ROS_INFO("Before window");
-    if (window != NULL)
-      delete (window);
-    window = new CVD::VideoDisplay(new_image.size());
-    ROS_INFO("After window");
-    glDrawPixels(new_image);
-    glFlush();
-    image.close();
-    image_saved = true;
+    std::cout << "stage 0 image == NULL?" << (image == NULL) << std::endl;
+    if (image == NULL)
+      image = new DroneImage(img, sensor_msgs::image_encodings::RGB8);
+    else if (image->update())
+    {
+      picture_flag = false;
+    }
   }
 }
+
+//    std::fstream image;
+//    CVD::Image<CVD::Rgb<CVD::byte> > new_image;
+//    picture_flag = false;
+//    cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::RGB8);
+//    ROS_INFO("Before mutex");
+//    pthread_mutex_lock(&pic_mt);
+//    if (new_image.size().x != img->width || new_image.size().y != img->height)
+//      new_image.resize(CVD::ImageRef(img->width, img->height));
+//    memcpy(new_image.data(), cv_ptr->image.data, img->width * img->height * 3); ///sy cpy the image to mimFrameBW.data()
+//    pthread_mutex_unlock(&pic_mt);
+//    ROS_INFO("After mutex");
+//    image.open("output.bmp", std::fstream::out);
+//    CVD::img_save(new_image, image, CVD::ImageType::BMP);
+//    ROS_INFO("Before window");
+//    if (window != NULL)
+//      delete (window);
+//    window = new CVD::VideoDisplay(new_image.size());
+//    ROS_INFO("After window");
+//    glDrawPixels(new_image);
+//    glFlush();
+//    image.close();
+//    image_saved = true;
+//}
 
 /** Callback function for /ardrone/navdata to get the navdata, especially the detection result.
  *  Getting the navdata from the topic and process the data. Then reporting the detection result
@@ -382,10 +395,10 @@ void PRGPARDrone::acquireCurrentStateCb(const tum_ardrone::filter_state &current
 {
   currentPos_x = currentState.x - offset_x;
   currentPos_y = currentState.y - offset_y;
-  //ROS_INFO("x:%.2f(%.2f) y:%.2f (%.2f)", currentPos_x,offset_x,currentPos_y,offset_y);
+//ROS_INFO("x:%.2f(%.2f) y:%.2f (%.2f)", currentPos_x,offset_x,currentPos_y,offset_y);
   if (fabs(currentPos_x) > 1.6 || fabs(currentPos_y) > 1.6)
   {
-    //ROS_INFO("outside home x:%.2f y:%.2f", currentPos_x, currentPos_y);
+//ROS_INFO("outside home x:%.2f y:%.2f", currentPos_x, currentPos_y);
     home = false;
   }
   else
@@ -513,7 +526,7 @@ void PRGPARDrone::setTargetTag()
 {
   detecttypeSrv.call(detect_srvs);
   ROS_INFO("change the detect type");
-  current_tag = (current_tag + 1) % 2; ///sy TODO tag_type 3 available?
+  current_tag = (current_tag + 1) % 2;
 }
 
 bool PRGPARDrone::smallRangeSearch()
@@ -722,13 +735,13 @@ bool PRGPARDrone::centeringTag(double current_height)
   ros::spinOnce();
   if (smallRangeSearch())
   {
-    //This conversion is for a height of 200cm only
+//This conversion is for a height of 200cm only
     float x_move = (float)tag_x_coord - 500;
     x_move = x_move * current_height / 1070;
-    //x_move = x_move * current_height / 1200;
+//x_move = x_move * current_height / 1200;
     float y_move = (float)tag_y_coord - 500;
     y_move = y_move * current_height / 1940 * -1;
-    //y_move = y_move * current_height / 2300 * -1;
+//y_move = y_move * current_height / 2300 * -1;
     float angle_to_turn = 0;
     if (home == true)
     {
@@ -738,7 +751,7 @@ bool PRGPARDrone::centeringTag(double current_height)
     {
       angle_to_turn = 0;
     }
-    //Error handling
+//Error handling
     if (x_move > 1 || y_move > 1 || x_move < -1 || y_move < -1 || angle_to_turn > 200 || angle_to_turn < -200)
     {
       ROS_WARN("Centring move command out of allowed range");
@@ -794,10 +807,16 @@ void PRGPARDrone::run()
   ROS_INFO("Starting running");
   if (ros::ok())
   {
+    while (1)
+    {
+      ndPause.sleep();
+      std::cout << picture_flag << std::endl;
+      ros::spinOnce();
+    }
     if (!initARDrone())
     {
       ROS_INFO("Drone initialisation failed");
-      sendFlightCmd("c land");
+      sendFlightCmd("c land"); ///sy TODO land method
       return;
     }
     setTargetTag();
@@ -820,7 +839,7 @@ void PRGPARDrone::run()
 //    while(image_saved == false){
 //      ros::spinOnce();
 //    }
-    ///sy takePicCb
+///sy takePicCb
     ndPause.sleep();
     sendCmdToPiswarm(); ///sy piswarm back
     toggleCam();
