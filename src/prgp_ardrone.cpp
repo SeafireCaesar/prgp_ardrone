@@ -90,12 +90,14 @@ PRGPARDrone::PRGPARDrone()
   home_tag_det = false;
   executing_command_flag = false;
   current_tag = 0;
+  //Rob temporary
   target_tag = 0;
+  //
   altitude = 0;
   reference_set = false;
   home = true;
   image_saved = false;
-
+  lost_count = 0;
   altitude = 0; //Initialise the private variable in the Class definition will show warning.
   tag_x_coord = 0;
   tag_y_coord = 0;
@@ -243,13 +245,13 @@ void PRGPARDrone::acquireTagResultCb(const ardrone_autonomy::Navdata &navdataRec
 
           if (j == 1)
           {
-            if (width[0] > 45)
-            {
+            //if (width[0] > 45)
+            //{
               detected_flag = true;
               tag_x_coord = x_coord[0];
               tag_y_coord = y_coord[0];
               tag_orient = orient[0];
-            }
+            //}
           }
           else if (j == 2)
           {
@@ -371,7 +373,7 @@ void PRGPARDrone::acquireTagResultCb(const ardrone_autonomy::Navdata &navdataRec
       }
     }
   }
-  ROS_INFO("TagResultCb is completed.");
+  //ROS_INFO("TagResultCb is completed.");
 }
 
 /** Callback function for /ardrone/predictedPose to get the current state of AR.Drone.
@@ -382,6 +384,7 @@ void PRGPARDrone::acquireCurrentStateCb(const tum_ardrone::filter_state &current
 {
   currentPos_x = currentState.x - offset_x;
   currentPos_y = currentState.y - offset_y;
+  currentPos_z = currentState.z - offset_z;
   //ROS_INFO("x:%.2f(%.2f) y:%.2f (%.2f)", currentPos_x,offset_x,currentPos_y,offset_y);
   if (fabs(currentPos_x) > 1.6 || fabs(currentPos_y) > 1.6)
   {
@@ -391,12 +394,22 @@ void PRGPARDrone::acquireCurrentStateCb(const tum_ardrone::filter_state &current
   else
   {
     home = true;
-    if (detected_flag)
-      ROS_INFO("HOME AND DETECTED");
+   // if (detected_flag)
+      //ROS_INFO("HOME AND DETECTED");
   }
   if (currentState.ptamState == currentState.PTAM_LOST)
   {
-    stopCmdAndHover();
+    lost_count++;
+  }
+  else
+  {
+    lost_count = 0;
+  }
+
+  if (currentState.ptamState == currentState.PTAM_LOST && lost_count > 5)
+  {
+    //stopCmdAndHover();
+    lost_count = 0;
   }
 }
 
@@ -476,12 +489,9 @@ void PRGPARDrone::moveToPose(double x, double y, double z, double yaw = 0)
  */
 void PRGPARDrone::stopCmdAndHover()
 {
-  double tag_x = currentPos_x;
-  double tag_y = currentPos_y;
   stopCmdAndHoverSrv.call(stopCmd_srvs);
   ROS_INFO("Command is cleared.");
   ndPause.sleep();
-  moveToPose(tag_x, tag_y, 0, 0);
 }
 
 /** Moving ARDrone by a distance and angle from its current pose.
@@ -518,49 +528,60 @@ void PRGPARDrone::setTargetTag()
 
 bool PRGPARDrone::smallRangeSearch()
 {
+  ros::spinOnce();
   if (detected_flag == true)
   {
-    ROS_INFO("TAG in sight, small range search aborted");
+    ROS_INFO("TAG in sight, small range search finished");
     return true;
   }
   double small_distance = 0;
 
   if (home)
   {
-    small_distance = 0.5;
+    //rob temp
+    small_distance = 0.25;
   }
   else
   {
-    small_distance = 0.5;
+    small_distance = 0.35;
   }
 
-  double command_list[8][4] = { {0, -small_distance, 0, 0}, //go backwards
-      {-small_distance, 0, 0, 0}, //go left
-      {0, small_distance, 0, 0}, //go forward
-      {0, small_distance, 0, 0}, //go forward
-      {small_distance, 0, 0, 0}, //go right
-      {small_distance, 0, 0, 0}, //go right
-      {0, -small_distance, 0, 0}, //go backwards
-      {0, -small_distance, 0, 0}, //go backwards
+#define NUM_SS_CMDS 11
+  double command_list[NUM_SS_CMDS][4] = { {-small_distance*2, small_distance*2, 0, 0}, //go diagonal forward and left 2 units
+      {0, -small_distance*4, 0, 0}, //go back 4 units
+      {small_distance*2, 0, 0, 0}, //go right 2 units
+      {0, small_distance*4, 0, 0}, //go forward 4 units
+      {small_distance*2, 0, 0, 0}, //go right 2 units
+      {0, -small_distance*5, 0, 0}, //go back 5 units
+      {-small_distance*5,0 , 0, 0}, //go left 5 units
+      {0, small_distance*6, 0, 0}, //go forwards 6 units
+      {small_distance*6, 0, 0, 0}, //go right 6 units
+      {0, -small_distance*6, 0, 0}, //go back 5 units
+      {-small_distance*3, small_distance*3, 0, 0} //go back to start position.
       };
 
-  int i = 0;
-  while (detected_flag == false && i < 8)
+  uint8_t i = 0;
+  for (i = 0; i < NUM_SS_CMDS; i++)
   {
-    ROS_INFO("search for tag");
-
     moveBy(command_list[i][0], command_list[i][1], command_list[i][2], command_list[i][3]);
+  }
 
-    ndPause.sleep();
-    ndPause.sleep();
-    ndPause.sleep(); //TODO
+  while (!detected_flag)
+  {
     ros::spinOnce();
-    i++;
+    usleep(10000);
   }
 
   if (detected_flag == true)
   {
-    ROS_INFO("Small range search finished");
+    double tag_x = currentPos_x;
+    double tag_y = currentPos_y;
+    double tag_z = currentPos_z;
+    stopCmdAndHover();
+    moveToPose(tag_x, tag_y, tag_z, 0);
+    ndPause.sleep();//Need to wait enough time for command to complete before returning
+    ndPause.sleep();
+    ndPause.sleep();
     return true;
   }
   else
@@ -576,7 +597,7 @@ bool PRGPARDrone::smallRangeSearch()
 bool PRGPARDrone::initARDrone()
 {
 
-  ndPause.sleep(); //TODO
+  ndPause.sleep(); //TODO These waits do seem to be required... but why?
   ndPause.sleep();
   ndPause.sleep();
   ndPause.sleep();
@@ -586,9 +607,9 @@ bool PRGPARDrone::initARDrone()
   sendFlightCmd("c autoTakeover 500 800 4000 0.5");
   sendFlightCmd("c setMaxControl 1"); //set AR.Drone speed limit
   sendFlightCmd("c setInitialReachDist 0.2");
-  sendFlightCmd("c setStayWithinDist 0.5");
+  sendFlightCmd("c setStayWithinDist 0.3");
 // stay 1 seconds
-  sendFlightCmd("c setStayTime 2");
+  sendFlightCmd("c setStayTime 2.5");
 //PTAM
   sendFlightCmd("c lockScaleFP");
 
@@ -596,6 +617,7 @@ bool PRGPARDrone::initARDrone()
   ros::spinOnce();
   offset_x = currentPos_x + offset_x;
   offset_y = currentPos_y + offset_y;
+  offset_z = currentPos_z + offset_z;
 
   ndPause.sleep();
   ndPause.sleep();
@@ -605,11 +627,17 @@ bool PRGPARDrone::initARDrone()
 
   ROS_INFO("Planned change in alt: %f. Current altd: %f", (DESIRED_HEIGHT - altitude), altitude);
   moveBy(0.0, 0.0, (DESIRED_HEIGHT - altitude), 0.0);
-
+  ndPause.sleep();
+  ndPause.sleep();
   sendFlightCmd("c setReference $POSE$");
   ros::spinOnce();
   offset_x = currentPos_x + offset_x;
   offset_y = currentPos_y + offset_y;
+  offset_z = currentPos_z + offset_z;
+
+  //Rob temp
+  //moveToPose(0.0, 0.0, 1, 0);
+  //
   moveToPose(0.0, 0.0, EXTRA_HEIGHT, 0);
 
   ndPause.sleep();
@@ -628,23 +656,22 @@ bool PRGPARDrone::initARDrone()
     sendFlightCmd("c setReference $POSE$");
     offset_x = currentPos_x + offset_x;
     offset_y = currentPos_y + offset_y;
-    return true;
+    offset_z = currentPos_z + offset_z;
   }
   else
   {
     ROS_INFO("Unable to centre on home tag");
     return false;
   }
-  return false;
+  return true;
 }
-
 /** Flight and searching the target tag.
  *  Sending the flight commands to control the flight.
  */ //Rob# This function name is also a little unclear. SearchForTargetTag
 bool PRGPARDrone::searchForTargetTag()
 {
 #undef NUM_OF_CMD
-#define NUM_OF_CMD 5
+#define NUM_OF_CMD 20
 //  double command_list_search[NUM_OF_CMD][4] = { {0.8, 0, 0, 0}, {1.6, 0, 0, 0}, {2.4, 0, 0, 0}, /*{2.4, -0.81, 0, 0}, {3.2, -0.81,
 //   0, 0},*/
 //                                               {3.2, 0, 0, 0}, {3.2, 0.81, 0, 0}, {3.2, 1.62, 0, 0}, {3.2, 2.43, 0, 0},
@@ -662,12 +689,50 @@ bool PRGPARDrone::searchForTargetTag()
 //                                               {5.6, 0, 0, 0}, {4.8, 0, 0, 0}, {4, 0, 0, 0}, {3.2, 0, 0, 0}, {2.4, 0, 0,
 //                                                                                                              0},
 //                                               {1.6, 0, 0, 0}, {0.8, 0, 0, 0}, {0, 0, 0, 0}};
-  double command_list_search[NUM_OF_CMD][4] = { {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0},
-                                               {-2, 0, 0, 0}, /* {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0},
-   {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0},
-   {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0},
-   {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}
-   */};
+//  double command_list_search[NUM_OF_CMD][4] = { {-2, 0, 0, 0},//
+//                                                {-2, 1.5, 0, 0}, //
+//                                                {-2, 3, 0, 0}, //
+//                                                {-1.5, 3, 0, 0},//
+//                                                {-1.5, 1.5, 0, 0},//
+//                                                {-1.5, 0, 0, 0},//
+//                                                {-2.5, 0, 0, 0},
+//                                                {-2.5, 1.5, 0, 0},//
+//                                                {-2.5, 3, 0, 0},//
+//                                                {-2, 3, 0, 0},
+//                                                {-2, 1.5, 0, 0},
+//                                                {-2, 0, 0, 0}/* {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0},
+//   {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0},
+//   {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0},
+//   {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}
+//   */};
+  double command_list_search[NUM_OF_CMD][4] = { {-1, -1, 0, yawFromPos(-1,-1)},//
+                                                {-2, -2, 0, yawFromPos(-2,-2)},//
+                                                 {-3, -3, 0, yawFromPos(-3, -3)}, //
+                                                 {-4, -4, 0, yawFromPos(-4, -4)},//
+                                                 {-5, -5, 0, yawFromPos(-5, -5)},//
+                                                 {-4, -5, 0, yawFromPos(-4, -5)},//
+                                                 {-3, -5, 0, yawFromPos(-3, -5)},//
+                                                 {-2, -5, 0, yawFromPos(-2, -5)},//
+                                                 {-1, -5, 0, yawFromPos(-1, -5)},//
+                                                 {0, -5, 0, yawFromPos(0, -5)},//
+                                                 {1, -5, 0, yawFromPos(1, -5)},//
+                                                 {2, -5, 0, yawFromPos(2, -5)},//
+                                                 {3, -5, 0, yawFromPos(3, -5)},//
+                                                 {4, -5, 0, yawFromPos(4, -5)},//
+                                                 {5, -5, 0, yawFromPos(5, -5)},//
+                                                 {4, -4, 0, yawFromPos(4, -4)},//
+                                                 {3, -3, 0, yawFromPos(3, -3)},//
+                                                 {2, -2, 0, yawFromPos(2, -2)},//
+                                                 {1, -1, 0, yawFromPos(1, -1)},//
+                                                 {0, 0, 0, yawFromPos(0,0)},//
+  };//
+//                                                 {-1.5, 1.5, 0, 0},//
+//                                                 {-1.5, 0, 0, 0},//
+//                                                 {-2.5, 0, 0, 0},
+//                                                 {-2.5, 1.5, 0, 0},//
+//                                                 {-2.5, 3, 0, 0},//
+//                                                 {-2, 3, 0, 0},
+//                                                 {-2, 1.5, 0, 0},
   int i = 0;
   while (i < NUM_OF_CMD)
   {
@@ -678,19 +743,25 @@ bool PRGPARDrone::searchForTargetTag()
   ros::spinOnce();
   while (home) ///sy wait till drone is outside of home
   {
-    ROS_INFO("Drone is at home");
+
+    //ROS_INFO("Drone is at home");
     ros::spinOnce();
+    usleep(10000);
   }
   while (!detected_flag && !home) ///sy wait till tag is detected or come back to home
   {
-    ROS_INFO("Drone is outside home searching");
+    //ROS_INFO("Drone is outside home searching");
     ros::spinOnce();
+    usleep(10000);
   }
 
   if (detected_flag && !home)
   {
     ROS_INFO("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
+    double tag_x = currentPos_x;
+    double tag_y = currentPos_y;
     stopCmdAndHover();
+    moveToPose(tag_x, tag_y, 0, 0);
     ndPause.sleep(); //TODO
     ndPause.sleep();
     ndPause.sleep();
@@ -722,58 +793,65 @@ bool PRGPARDrone::centeringTag(double current_height)
   ros::spinOnce();
   if (smallRangeSearch())
   {
-    //This conversion is for a height of 200cm only
-    float x_move = (float)tag_x_coord - 500;
-    x_move = x_move * current_height / 1070;
-    //x_move = x_move * current_height / 1200;
-    float y_move = (float)tag_y_coord - 500;
-    y_move = y_move * current_height / 1940 * -1;
-    //y_move = y_move * current_height / 2300 * -1;
-    float angle_to_turn = 0;
-    if (home == true)
+    if(smallRangeSearch())
     {
-      angle_to_turn = 180 - tag_orient;
+      //This conversion is for a height of 200cm only
+      float x_move = (float)tag_x_coord - 500;
+      x_move = x_move * current_height / 1070;
+      //x_move = x_move * current_height / 1200;
+      float y_move = (float)tag_y_coord - 500;
+      y_move = y_move * current_height / 1940 * -1;
+      //y_move = y_move * current_height / 2300 * -1;
+      float angle_to_turn = 0;
+      //Rob temp
+      //if(0)
+      if (home == true)
+      {
+        angle_to_turn = 180 - tag_orient;
+      }
+      else
+      {
+        angle_to_turn = 0;
+      }
+      //Error handling
+      if (x_move > 1 || y_move > 1 || x_move < -1 || y_move < -1 || angle_to_turn > 200 || angle_to_turn < -200)
+      {
+        ROS_WARN("Centring move command out of allowed range");
+        return false;
+      }
+      else
+      {
+        ROS_INFO("x coord is: %d, y coord is: %d", tag_x_coord, tag_y_coord);
+        ROS_INFO("Moving so Tag is at centre");
+        moveBy(x_move, y_move, 0.0, angle_to_turn);
+        ndPause.sleep();
+        ndPause.sleep();
+        ndPause.sleep(); //TODO are these waits all necessary?
+        ros::spinOnce();
+      }
     }
     else
     {
-      angle_to_turn = 0;
-    }
-    //Error handling
-    if (x_move > 1 || y_move > 1 || x_move < -1 || y_move < -1 || angle_to_turn > 200 || angle_to_turn < -200)
-    {
-      ROS_WARN("Centring move command out of allowed range");
-      return false;
-    }
-    else
-    {
-      ROS_INFO("x coord is: %d, y coord is: %d", tag_x_coord, tag_y_coord);
-      ROS_INFO("Moving so Tag is at centre");
-      moveBy(x_move, y_move, 0.0, angle_to_turn);
-      ndPause.sleep();
-      ndPause.sleep();
-      ndPause.sleep();
-      ndPause.sleep();
-      ndPause.sleep(); //TODO
-      ros::spinOnce();
-    }
-    if (detected_flag == true)
-    {
-      ROS_INFO("Drone centred above Tag");
-      return true;
-    }
-    else
-    {
-      ROS_INFO("TAG lost during centring. Centring failed");
+      ROS_INFO("Tag Lost, mission abort.");
       return false;
     }
   }
   else
   {
-    ROS_INFO("Tag not detected so unable to centre");
+    ROS_INFO("Small range search unsuccessful. Unable to centre.");
     return false;
   }
-  ROS_WARN("Code should not get here");
-  return false;
+
+  if (detected_flag == true)
+  {
+    ROS_INFO("Drone centred above Tag");
+    return true;
+  }
+  else
+  {
+    ROS_INFO("TAG lost during centring.");
+    return false;
+  }
 }
 
 /** Send commands to fly home.
@@ -781,8 +859,61 @@ bool PRGPARDrone::centeringTag(double current_height)
  */
 void PRGPARDrone::flightToHome() //TODO
 {
+  ROS_INFO("Returning to home");
+  ros::spinOnce();
   ROS_INFO("Current position is : %0.2f, %0.2f", (currentPos_x), (currentPos_y));
+//Practise function********************************
+//  if (currentPos_y > -currentPos_x)
+//  {
+//    moveToPose(0, 1, 0, 0);
+//  }
+//  else
+//  {
+//    moveToPose(-1, 0, 0, 0);
+//  }
+//  moveToPose(0, 0, 0, 0);
+//  centeringTag(DESIRED_HEIGHT);
+//actual function***********************************
+  if(currentPos_y > currentPos_x)
+  {
+    moveToPose(0,3.2,0,0);
+  }
+  else
+  {
+    moveToPose(3.2,0,0,0);
+  }
+  moveToPose(0,0,0,0);
+  centeringTag(DESIRED_HEIGHT);
 }
+
+double PRGPARDrone::yawFromPos(double x_coord,double y_coord)
+{
+  double desired_yaw;
+  double focusPoint = 2.4;
+  //note y_coord will be negative but need +ve length for the formula. Hence focusPoint - y_coord
+  double a = sqrt((x_coord*x_coord + y_coord*y_coord));
+  double b = sqrt(x_coord*x_coord + (focusPoint-y_coord)*(focusPoint-y_coord));
+  double c = focusPoint;
+  //From cosine rule
+  desired_yaw = acos((a*a+b*b-c*c)/(2*a*b))*180/3.14;
+  if(y_coord>0)
+  {
+    desired_yaw = 180 - desired_yaw;
+  }
+  if(x_coord>0)
+  {
+    desired_yaw = desired_yaw * -1;
+  }
+  if(desired_yaw < 30 && desired_yaw > -30)
+  {
+    return desired_yaw;
+  }
+  else
+  {
+    return 0;
+  }
+}
+
 
 /** The main running loop for the prgp_ardrone package.
  *  Getting the command from Pi-Swarm to start the AR.Drone. Then flight to the target. centering
@@ -794,39 +925,57 @@ void PRGPARDrone::run()
   ROS_INFO("Starting running");
   if (ros::ok())
   {
-    if (!initARDrone())
+    //Rob removed for testing
+//    while (!start_flag)
+//    {
+//
+//      ros::spinOnce();
+//      usleep(10000);
+//    }
+//    if (start_flag)
+    //Rob temp
+    if(1)
     {
-      ROS_INFO("Drone initialisation failed");
-      sendFlightCmd("c land");
-      return;
-    }
-    setTargetTag();
-    if (!searchForTargetTag()) ///sy exit till centred or search failed
-    {
-      ROS_INFO("Drone search failed");
-      sendFlightCmd("c land");
-      return;
-    }
-    toggleCam();
-    ndPause.sleep();
-//    ros::spinOnce(); //
-    picture_flag = true;
-    if (picture_flag)
-    {
+      if (!initARDrone())
+      {
+        ROS_INFO("Drone initialisation failed");
+        sendFlightCmd("c land");
+        return;
+      }
+
+      //while(1);
+      if(target_tag == 1)
+      {
+        setTargetTag();
+      }
+      if (!searchForTargetTag()) ///sy exit till centred or search failed
+      {
+        ROS_INFO("Drone search failed");
+        sendFlightCmd("c land");
+        return;
+      }
+      while(1);
+      toggleCam();
+      ndPause.sleep();
+      //    ros::spinOnce(); //
+      picture_flag = true;
+      //if (picture_flag)
+      //{
       ROS_INFO("picture flag changed");
       ros::spinOnce();
+     // }
+      ndPause.sleep();
+      toggleCam();//TODO make sure picture is good/successful
+
+      sendCmdToPiswarm(); ///sy piswarm back
+      sendCmdToPiswarm(); ///sy piswarm back
+      if(target_tag == 1)
+        {
+          setTargetTag();
+        }
+      flightToHome(); ///sy TODO make sure method returns only when it's home
+      land(); ///sy TODO "c land"?
     }
-//    while(image_saved == false){
-//      ros::spinOnce();
-//    }
-    ///sy takePicCb
-    ndPause.sleep();
-    sendCmdToPiswarm(); ///sy piswarm back
-    toggleCam();
-    while (1)
-      ;
-    flightToHome(); ///sy TODO make sure method returns only when it's home
-    land(); ///sy TODO "c land"?
   }
 }
 //  while(ros::ok())
