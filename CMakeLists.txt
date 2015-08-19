@@ -112,6 +112,9 @@ set(ARDRONE_HEADER_FILES
   include/prgp_ardrone/prgp_ardrone.h
   include/prgp_ardrone/image.h
 )
+set(ARDRONE_TEST_FILES    
+  src/test/utest.cpp
+)
 
 # set required libs and headers
 include_directories(
@@ -133,7 +136,7 @@ set(CVD_LIBRARIES GL cvd)
 
 ## Declare a cpp executable
 # add_executable(prgp_ardrone_node src/prgp_ardrone_node.cpp)
-add_executable(prgp_ardrone ${ARDRONE_SOURCE_FILES} ${ARDRONE_HEADER_FILES})
+add_executable(prgp_ardrone src/ardrone_main.cpp ${ARDRONE_SOURCE_FILES} ${ARDRONE_HEADER_FILES})
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
@@ -192,6 +195,13 @@ target_link_libraries(prgp_ardrone
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()
-
+catkin_add_gtest(${PROJECT_NAME}-test 
+  ${ARDRONE_SOURCE_FILES}
+  ${ARDRONE_HEADER_FILES}
+  ${ARDRONE_TEST_FILES}
+)
+if(TARGET ${PROJECT_NAME}-test)
+   target_link_libraries(${PROJECT_NAME}-test ${catkin_LIBRARIES} ${CVD_LIBRARIES})
+ endif()
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)

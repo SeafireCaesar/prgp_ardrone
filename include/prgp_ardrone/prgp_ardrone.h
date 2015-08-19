@@ -76,6 +76,7 @@
 
 #include <prgp_ardrone/image.h> ///sy
 
+
 #define DESIRED_HEIGHT 0.8
 #define EXTRA_HEIGHT 0.5
 /** The main class for the prgp_ardrone package.

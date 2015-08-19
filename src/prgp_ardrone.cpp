@@ -91,7 +91,7 @@ PRGPARDrone::PRGPARDrone()
   executing_command_flag = false;
   current_tag = 0;
   target_tag = 0;
-  altitude = 0;
+
   reference_set = false;
   home = true;
   image_saved = false;
@@ -169,30 +169,6 @@ void PRGPARDrone::takePicCb(const sensor_msgs::ImageConstPtr img)
     }
   }
 }
-
-//    std::fstream image;
-//    CVD::Image<CVD::Rgb<CVD::byte> > new_image;
-//    picture_flag = false;
-//    cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::RGB8);
-//    ROS_INFO("Before mutex");
-//    pthread_mutex_lock(&pic_mt);
-//    if (new_image.size().x != img->width || new_image.size().y != img->height)
-//      new_image.resize(CVD::ImageRef(img->width, img->height));
-//    memcpy(new_image.data(), cv_ptr->image.data, img->width * img->height * 3); ///sy cpy the image to mimFrameBW.data()
-//    pthread_mutex_unlock(&pic_mt);
-//    ROS_INFO("After mutex");
-//    image.open("output.bmp", std::fstream::out);
-//    CVD::img_save(new_image, image, CVD::ImageType::BMP);
-//    ROS_INFO("Before window");
-//    if (window != NULL)
-//      delete (window);
-//    window = new CVD::VideoDisplay(new_image.size());
-//    ROS_INFO("After window");
-//    glDrawPixels(new_image);
-//    glFlush();
-//    image.close();
-//    image_saved = true;
-//}
 
 /** Callback function for /ardrone/navdata to get the navdata, especially the detection result.
  *  Getting the navdata from the topic and process the data. Then reporting the detection result
@@ -471,7 +447,7 @@ void PRGPARDrone::sendFlightCmd(std::string c)
 /** Moving ARDrone to a certain pose.
  *
  */
-void PRGPARDrone::moveToPose(double x, double y, double z, double yaw = 0)
+void PRGPARDrone::moveToPose(double x, double y, double z = 0, double yaw = 0)
 {
   char buff[100];
   sprintf(buff, "c goto %.2f %.2f %.2f %.2f", x, y, z, yaw);
@@ -810,7 +786,6 @@ void PRGPARDrone::run()
     while (1)
     {
       ndPause.sleep();
-      std::cout << picture_flag << std::endl;
       ros::spinOnce();
     }
     if (!initARDrone())
@@ -887,14 +862,14 @@ void PRGPARDrone::run()
 /** main function of the prgp_ardrone package.
  *  create the ROS node, define the instance of the PRGPARDrone class. Calling the running loop.
  */
-int main(int argc, char **argv)
-{
-  ros::init(argc, argv, "prgp_ardrone"); //Create node
-  ROS_INFO("Started prgp_ardrone Node. Hi from ARE 2014/15");
-
-  PRGPARDrone PRGPARDrone;
-  PRGPARDrone.run();
-
-  return 0;
-}
+//int main(int argc, char **argv)
+//{
+//  ros::init(argc, argv, "prgp_ardrone"); //Create node
+//  ROS_INFO("Started prgp_ardrone Node. Hi from ARE 2014/15");
+//
+//  PRGPARDrone PRGPARDrone;
+////  PRGPARDrone.run();
+//
+//  return 0;
+//}
 
