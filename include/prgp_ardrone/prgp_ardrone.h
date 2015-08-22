@@ -76,7 +76,7 @@
 
 #define DESIRED_HEIGHT 0.8
 //Rob temp
-#define EXTRA_HEIGHT 0.6
+#define EXTRA_HEIGHT 0.4
 /** The main class for the prgp_ardrone package.
  */
 class PRGPARDrone
@@ -100,6 +100,7 @@ private:
   ros::Subscriber imgSub; /**< Subscriber to get the image from camera by /ardrone/image_raw */
   ros::Subscriber image_cmd_sub; ///
   ros::Publisher image_cmd_pub; ///
+  ros::Subscriber cmd_completed_sub;
 
   //Rob#
   ros::Subscriber cmdCompleteSub;
@@ -141,6 +142,7 @@ private:
   bool home_tag_det; /**< The value will be true to activate the tag detection at the home stage of AR.Drone */
   bool home_detected_flag; /**< The value will be true when tag detected at home stage */
   bool executing_command_flag; //Rob# /**< this value will be true whilst the drone is executing a tum command, it will be set to false after a callback */
+  bool cmd_completed_flag;
   bool home;
   bool image_saved;
   CVD::VideoDisplay * window = NULL;
@@ -183,7 +185,7 @@ public:
   void takePicCb(const sensor_msgs::ImageConstPtr img);
   void acquireTagResultCb(const ardrone_autonomy::Navdata &navdataReceived);
   void acquireCurrentStateCb(const tum_ardrone::filter_state &currentState);
-  void imageCb(const std_msgs::Empty msg); ///
+  void cmdFeedbackCb(const std_msgs::Empty msg);
 
   //functions
   void sendCmdToPiswarm();
@@ -191,6 +193,7 @@ public:
   void takeOff();
   void land();
   void sendFlightCmd(std::string c);
+  void sendInitCmd(std::string c);
   void toggleCam();
   void setTargetTag();
   bool initARDrone();

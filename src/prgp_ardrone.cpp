@@ -69,9 +69,8 @@ PRGPARDrone::PRGPARDrone()
   cmdSub = ndh_.subscribe("piswarm_com", 1, &PRGPARDrone::piswarmCmdRevCb, this);
   tagSub = ndh_.subscribe("/ardrone/navdata", 1, &PRGPARDrone::acquireTagResultCb, this);
   currentStateSub = ndh_.subscribe("/ardrone/predictedPose", 1, &PRGPARDrone::acquireCurrentStateCb, this);
-  imgSub = ndh_.subscribe("/ardrone/image_raw", 10, &PRGPARDrone::takePicCb, this);
-  image_cmd_pub = ndh_.advertise<std_msgs::Empty>("image_test", 10, this); ///
-  image_cmd_sub = ndh_.subscribe("image_test", 10, &PRGPARDrone::imageCb, this); ///
+  imgSub = ndh_.subscribe("/ardrone/bottom/image_raw", 10, &PRGPARDrone::takePicCb, this);
+  cmd_completed_sub = ndh_.subscribe("cmd_fdbk",1, &PRGPARDrone::cmdFeedbackCb, this);
 
   //Service client
   toggleCamSrv = ndh_.serviceClient<std_srvs::Empty>("/ardrone/togglecam", 1);
@@ -89,6 +88,7 @@ PRGPARDrone::PRGPARDrone()
   init_tag_det = false;
   home_tag_det = false;
   executing_command_flag = false;
+  cmd_completed_flag = true;
   current_tag = 0;
   //Rob temporary
   target_tag = 0;
@@ -116,10 +116,6 @@ PRGPARDrone::~PRGPARDrone(void)
   delete (window);
 }
 
-void PRGPARDrone::imageCb(const std_msgs::Empty msg) ///
-{
-  picture_flag = true;
-} ///
 /** Callback function for piswarm_com topic to get the command from the Pi-Swarm.
  *  Pi-Swarm send the recruiting command to the radio modem, the radio modem transfer the command to
  *  prgp_piswarmcom package. Then the prgp_piswarmcom package publish the command to the piswarm_com
@@ -156,7 +152,7 @@ void PRGPARDrone::piswarmCmdRevCb(const std_msgs::StringConstPtr str)
  */
 void PRGPARDrone::takePicCb(const sensor_msgs::ImageConstPtr img)
 {
-  if (picture_flag == true) ///sy TODO change the flag
+  if (picture_flag == true)
   {
     std::fstream image;
     CVD::Image<CVD::Rgb<CVD::byte> > new_image;
@@ -182,6 +178,14 @@ void PRGPARDrone::takePicCb(const sensor_msgs::ImageConstPtr img)
     image_saved = true;
   }
 }
+
+void PRGPARDrone::cmdFeedbackCb(const std_msgs::Empty msg)
+{
+  cmd_completed_flag = true;
+}
+
+
+
 
 /** Callback function for /ardrone/navdata to get the navdata, especially the detection result.
  *  Getting the navdata from the topic and process the data. Then reporting the detection result
@@ -245,7 +249,7 @@ void PRGPARDrone::acquireTagResultCb(const ardrone_autonomy::Navdata &navdataRec
 
           if (j == 1)
           {
-            //if (width[0] > 45)
+            //if (width[0] > 45)//If just using two tags then leave this commented
             //{
               detected_flag = true;
               tag_x_coord = x_coord[0];
@@ -384,16 +388,15 @@ void PRGPARDrone::acquireCurrentStateCb(const tum_ardrone::filter_state &current
 {
   currentPos_x = currentState.x - offset_x;
   currentPos_y = currentState.y - offset_y;
-  currentPos_z = currentState.z - offset_z;
   //ROS_INFO("x:%.2f(%.2f) y:%.2f (%.2f)", currentPos_x,offset_x,currentPos_y,offset_y);
-  if (fabs(currentPos_x) > 1.6 || fabs(currentPos_y) > 1.6)
+  if (fabs(currentPos_x) < 0.65 && fabs(currentPos_y) < 0.65)
   {
     //ROS_INFO("outside home x:%.2f y:%.2f", currentPos_x, currentPos_y);
-    home = false;
+    home = true;
   }
   else
   {
-    home = true;
+    home = false;
    // if (detected_flag)
       //ROS_INFO("HOME AND DETECTED");
   }
@@ -429,7 +432,7 @@ void PRGPARDrone::sendCmdToPiswarm()
 /** Sending the command directly to the ardrone_autonomy package by cmd_vel topic.
  *  Sending the command to control the yaw, gaz, pitch, roll and other paramaters.
  */
-void PRGPARDrone::sendVelCmd() ///sy TODO not used
+void PRGPARDrone::sendVelCmd()
 {
   velCmd.angular.z = 0; // -cmd.yaw;
   velCmd.linear.z = 0; //cmd.gaz;
@@ -441,7 +444,7 @@ void PRGPARDrone::sendVelCmd() ///sy TODO not used
 
 /** Sending the takeoff command directly to the ardrone_autonomy package.
  */
-void PRGPARDrone::takeOff() ///sy TODO not used
+void PRGPARDrone::takeOff()
 {
   takeoffPub.publish(std_msgs::Empty());
   ROS_INFO("Takeoff");
@@ -466,8 +469,8 @@ void PRGPARDrone::sendFlightCmd(std::string c)
   drone_pub.publish(s);
   pthread_mutex_unlock(&send_CS);
   ROS_INFO("%s", c.c_str());
+  cmd_completed_flag = false;
 }
-
 /** Moving ARDrone to a certain pose.
  *
  */
@@ -491,7 +494,7 @@ void PRGPARDrone::stopCmdAndHover()
 {
   stopCmdAndHoverSrv.call(stopCmd_srvs);
   ROS_INFO("Command is cleared.");
-  ndPause.sleep();
+//  ndPause.sleep();
 }
 
 /** Moving ARDrone by a distance and angle from its current pose.
@@ -523,27 +526,34 @@ void PRGPARDrone::setTargetTag()
 {
   detecttypeSrv.call(detect_srvs);
   ROS_INFO("change the detect type");
-  current_tag = (current_tag + 1) % 2; ///sy TODO tag_type 3 available?
+  //current_tag = (current_tag + 1) % 2;
 }
 
 bool PRGPARDrone::smallRangeSearch()
 {
   ros::spinOnce();
-  if (detected_flag == true)
-  {
-    ROS_INFO("TAG in sight, small range search finished");
-    return true;
+  int loop;
+  //Allow multiple chances to spot tag in case it is in view but on the limit of range
+  for(loop=0; loop<100; loop++){
+    if (detected_flag == true)
+    {
+      ROS_INFO("TAG in sight, small range search finished");
+      return true;
+    } else {
+      ros::spinOnce();
+      usleep(5000);
+    }
   }
   double small_distance = 0;
 
   if (home)
   {
     //rob temp
-    small_distance = 0.25;
+    small_distance = 0.2;
   }
   else
   {
-    small_distance = 0.35;
+    small_distance = 0.1;
   }
 
 #define NUM_SS_CMDS 11
@@ -569,19 +579,24 @@ bool PRGPARDrone::smallRangeSearch()
   while (!detected_flag)
   {
     ros::spinOnce();
-    usleep(10000);
+    usleep(1000);
   }
 
   if (detected_flag == true)
   {
     double tag_x = currentPos_x;
     double tag_y = currentPos_y;
-    double tag_z = currentPos_z;
     stopCmdAndHover();
-    moveToPose(tag_x, tag_y, tag_z, 0);
-    ndPause.sleep();//Need to wait enough time for command to complete before returning
-    ndPause.sleep();
-    ndPause.sleep();
+    if(home){
+      moveToPose(tag_x, tag_y, EXTRA_HEIGHT, 0);
+    }
+    else
+    {
+      moveToPose(tag_x, tag_y, 0, 0);
+    }
+    while(cmd_completed_flag == false){
+      ros::spinOnce();
+    }
     return true;
   }
   else
@@ -591,72 +606,70 @@ bool PRGPARDrone::smallRangeSearch()
   }
 }
 
+void PRGPARDrone::sendInitCmd(std::string c)
+{
+  sendFlightCmd(c);
+  while (!cmd_completed_flag)
+  {
+    ros::spinOnce();
+  }
+}
 /** Initialise the ARDrone when it starts.
  *  Initialise the PTAM and set the reference point.
  */
 bool PRGPARDrone::initARDrone()
 {
 
-  ndPause.sleep(); //TODO These waits do seem to be required... but why?
+  ndPause.sleep();
   ndPause.sleep();
   ndPause.sleep();
   ndPause.sleep();
 
   sendFlightCmd("c start");
-  sendFlightCmd("c takeoff");
-  sendFlightCmd("c autoTakeover 500 800 4000 0.5");
+  sendInitCmd("c takeoff");
+  sendInitCmd("c autoTakeover 500 800 4000 0.5");
+
   sendFlightCmd("c setMaxControl 1"); //set AR.Drone speed limit
   sendFlightCmd("c setInitialReachDist 0.2");
   sendFlightCmd("c setStayWithinDist 0.3");
 // stay 1 seconds
   sendFlightCmd("c setStayTime 2.5");
 //PTAM
-  sendFlightCmd("c lockScaleFP");
 
   sendFlightCmd("c setReference $POSE$");
-  ros::spinOnce();
-  offset_x = currentPos_x + offset_x;
-  offset_y = currentPos_y + offset_y;
-  offset_z = currentPos_z + offset_z;
+  sendFlightCmd("c lockScaleFP");
 
-  ndPause.sleep();
-  ndPause.sleep();
-  ndPause.sleep();
-  ndPause.sleep();
   ros::spinOnce();
 
   ROS_INFO("Planned change in alt: %f. Current altd: %f", (DESIRED_HEIGHT - altitude), altitude);
   moveBy(0.0, 0.0, (DESIRED_HEIGHT - altitude), 0.0);
-  ndPause.sleep();
-  ndPause.sleep();
+  while(cmd_completed_flag == false)
+  {
+    ros::spinOnce();
+  }
   sendFlightCmd("c setReference $POSE$");
-  ros::spinOnce();
   offset_x = currentPos_x + offset_x;
   offset_y = currentPos_y + offset_y;
-  offset_z = currentPos_z + offset_z;
 
-  //Rob temp
-  //moveToPose(0.0, 0.0, 1, 0);
   //
   moveToPose(0.0, 0.0, EXTRA_HEIGHT, 0);
+  while(cmd_completed_flag == false)
+  {
+    ros::spinOnce();
+  }
 
-  ndPause.sleep();
-  ndPause.sleep();
-  ndPause.sleep();
-  ndPause.sleep();
-  ndPause.sleep();
-  ndPause.sleep();
 
-  ros::spinOnce();
 
   if (centeringTag(DESIRED_HEIGHT + EXTRA_HEIGHT))
   {
     moveBy(0, 0, -EXTRA_HEIGHT, 0);
-    ros::spinOnce();
+    while(cmd_completed_flag == false)
+    {
+      ros::spinOnce();
+    }
     sendFlightCmd("c setReference $POSE$");
     offset_x = currentPos_x + offset_x;
     offset_y = currentPos_y + offset_y;
-    offset_z = currentPos_z + offset_z;
   }
   else
   {
@@ -671,61 +684,100 @@ bool PRGPARDrone::initARDrone()
 bool PRGPARDrone::searchForTargetTag()
 {
 #undef NUM_OF_CMD
-#define NUM_OF_CMD 20
-//  double command_list_search[NUM_OF_CMD][4] = { {0.8, 0, 0, 0}, {1.6, 0, 0, 0}, {2.4, 0, 0, 0}, /*{2.4, -0.81, 0, 0}, {3.2, -0.81,
-//   0, 0},*/
-//                                               {3.2, 0, 0, 0}, {3.2, 0.81, 0, 0}, {3.2, 1.62, 0, 0}, {3.2, 2.43, 0, 0},
-//                                               {3.2, 3.24, 0, 0}, {3.2, 4.05, 0, 0}, {3.2, 4.86, 0, 0},
-//                                               {3.2, 5.67, 0, 0}, {4, 5.67, 0, 0}, {4, 4.86, 0, 0}, {4, 4.05, 0, 0}, {
-//                                                   4, 3.24, 0, 0},
-//                                               {4, 2.43, 0, 0}, {4, 1.62, 0, 0}, {4, 0.81, 0, 0}, {4, 0, 0, 0}, /*{4, -0.81, 0, 0}, {4.8, -0.81, 0, 0}, */
-//                                               {4.8, 0, 0, 0}, {4.8, 0.81, 0, 0}, {4.8, 1.62, 0, 0}, {4.8, 2.43, 0, 0},
-//                                               {4.8, 3.24, 0, 0}, {4.8, 4.05, 0, 0}, {4.8, 4.86, 0, 0},
-//                                               {4.8, 5.67, 0, 0}, {5.6, 5.67, 0, 0}, {5.6, 4.86, 0, 0},
-//                                               {5.6, 4.05, 0, 0}, {5.6, 3.26, 0, 0}, {5.6, 2.43, 0, 0},
-//                                               {5.6, 1.62, 0, 0}, {5.6, 0.81, 0, 0}, {5.6, 0, 0, 0}, /*{5.6,
-//                                                -0.81,
-//                                                0, 0},*/
-//                                               {5.6, 0, 0, 0}, {4.8, 0, 0, 0}, {4, 0, 0, 0}, {3.2, 0, 0, 0}, {2.4, 0, 0,
-//                                                                                                              0},
+#define NUM_OF_CMD 42
+  float const X_SCALE = 0.7;
+  float const Y_SCALE = 0.95;
+  double command_list_search[NUM_OF_CMD][4] = { //path for starting tag at
+                                                {1.2*X_SCALE, 0,0},//left leave home
+                                                {1.85*X_SCALE, 0,0},//left leave home
+                                                {1.85*X_SCALE,-1.0*Y_SCALE,0},//back
+                                                {2.7*X_SCALE,-1.0*Y_SCALE,0},//right
+                                                {2.7*X_SCALE,1.75*Y_SCALE,0},//forward
+                                                {3.55*X_SCALE,1.75*Y_SCALE,0},//right
+                                                {3.55*X_SCALE,-1.0*Y_SCALE,0},//back
+                                                {4.4*X_SCALE,-1.0*Y_SCALE,0},//right
+                                                {4.4*X_SCALE,1.75*Y_SCALE,0},//forward
+                                                {5.25*X_SCALE,1.75*Y_SCALE,0},//right
+                                                {5.25*X_SCALE,-1.0*Y_SCALE,0},//back
+                                                {6.1*X_SCALE,-1.0*Y_SCALE,0},//right
+                                                {6.1*X_SCALE,1.75*Y_SCALE,0},//forward
+                                                {6.1*X_SCALE,3.8*Y_SCALE,0},//forward
+                                                {6.1*X_SCALE,5.9*Y_SCALE,0},//forward to front left corner
+                                                {5.25*X_SCALE,5.9*Y_SCALE,0},//left
+                                                {5.25*X_SCALE,3.8*Y_SCALE,0},//backward
+                                                {5.25*X_SCALE,1.75*Y_SCALE,0},//backward
+                                                {4.4*X_SCALE,1.75*Y_SCALE,0},//left
+                                                {4.4*X_SCALE,3.8*Y_SCALE,0},//forward
+                                                {4.4*X_SCALE,5.8*Y_SCALE,0},//forward
+                                                {3.55*X_SCALE,5.8*Y_SCALE,0},//left
+                                                {3.55*X_SCALE,3.8*Y_SCALE,0},//backward
+                                                {3.55*X_SCALE,1.75*Y_SCALE,0},//back
+                                                {2.7*X_SCALE,1.75*Y_SCALE,0},//left
+                                                {2.7*X_SCALE,3.8*Y_SCALE,0},//forward
+                                                {2.7*X_SCALE,5.7*Y_SCALE,0},//forward
+                                                {1.85*X_SCALE,5.7*Y_SCALE,0},//left
+                                                {1.85*X_SCALE,3.8*Y_SCALE,0},//backward
+                                                {1.85*X_SCALE,2.5*Y_SCALE,0},//backward //this only goes back to 2m so as to be safe from hitting gantry
+                                                {1*X_SCALE,2.5*Y_SCALE,0},//left
+                                                {1*X_SCALE,3.8*Y_SCALE,0},//forward
+                                                {1*X_SCALE,5.6*Y_SCALE,0},//forward
+                                                {0.15*X_SCALE,5.6*Y_SCALE,0},//left
+                                                {0.15*X_SCALE,3.8*Y_SCALE,0},//backward
+                                                {0.15*X_SCALE,1.75*Y_SCALE,0},//backward
+                                                {-0.7*X_SCALE,1.75*Y_SCALE,0},//left
+                                                {-0.7*X_SCALE,3.8*Y_SCALE,0},//forward
+                                                {-0.7*X_SCALE,5.5*Y_SCALE,0},//forward
+                                                {-1.1*X_SCALE,5.5*Y_SCALE,0},//left
+                                                {-1.1*X_SCALE,3*Y_SCALE,0},//back //not the whole way to avoid bit of desk that sticks out
+                                                {-1,-1,0}};
 //                                               {1.6, 0, 0, 0}, {0.8, 0, 0, 0}, {0, 0, 0, 0}};
 //  double command_list_search[NUM_OF_CMD][4] = { {-2, 0, 0, 0},//
 //                                                {-2, 1.5, 0, 0}, //
 //                                                {-2, 3, 0, 0}, //
-//                                                {-1.5, 3, 0, 0},//
-//                                                {-1.5, 1.5, 0, 0},//
-//                                                {-1.5, 0, 0, 0},//
+//                                                {-3, 3, 0, 0},//
+//                                                {-3, 1.5, 0, 0},//
+//                                                {-3, 0, 0, 0},//
 //                                                {-2.5, 0, 0, 0},
 //                                                {-2.5, 1.5, 0, 0},//
 //                                                {-2.5, 3, 0, 0},//
 //                                                {-2, 3, 0, 0},
 //                                                {-2, 1.5, 0, 0},
-//                                                {-2, 0, 0, 0}/* {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0},
+//                                                {-2, 0, 0, 0} //{-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0},
 //   {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0},
 //   {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0},
 //   {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}, {-2, 0, 0, 0}, {-2, 3, 0, 0}
-//   */};
-  double command_list_search[NUM_OF_CMD][4] = { {-1, -1, 0, yawFromPos(-1,-1)},//
-                                                {-2, -2, 0, yawFromPos(-2,-2)},//
-                                                 {-3, -3, 0, yawFromPos(-3, -3)}, //
-                                                 {-4, -4, 0, yawFromPos(-4, -4)},//
-                                                 {-5, -5, 0, yawFromPos(-5, -5)},//
-                                                 {-4, -5, 0, yawFromPos(-4, -5)},//
-                                                 {-3, -5, 0, yawFromPos(-3, -5)},//
-                                                 {-2, -5, 0, yawFromPos(-2, -5)},//
-                                                 {-1, -5, 0, yawFromPos(-1, -5)},//
-                                                 {0, -5, 0, yawFromPos(0, -5)},//
-                                                 {1, -5, 0, yawFromPos(1, -5)},//
-                                                 {2, -5, 0, yawFromPos(2, -5)},//
-                                                 {3, -5, 0, yawFromPos(3, -5)},//
-                                                 {4, -5, 0, yawFromPos(4, -5)},//
-                                                 {5, -5, 0, yawFromPos(5, -5)},//
-                                                 {4, -4, 0, yawFromPos(4, -4)},//
-                                                 {3, -3, 0, yawFromPos(3, -3)},//
-                                                 {2, -2, 0, yawFromPos(2, -2)},//
-                                                 {1, -1, 0, yawFromPos(1, -1)},//
-                                                 {0, 0, 0, yawFromPos(0,0)},//
+
+/*
+  double command_list_search[NUM_OF_CMD][4] = {  {0.6,0.6, 0, yawFromPos(0.6,0.6)},//
+                                                {1.2, 1.2,0, yawFromPos(1.2,1.2)},//
+                                                {1.8, 1.8,0, yawFromPos(1.8,1.8)},//
+                                                {2.4, 2.4, 0,yawFromPos(2.4,2.4)},//
+                                                {3.0, 3.0, 0,yawFromPos(3.0,3.0)},//
+                                                {3.6, 3.6, 0, yawFromPos(3.6,3.6)},//
+                                                 {4.2,4.2, 0, yawFromPos(4.2,4.2)},//
+                                                 {3.6,4.8, 0,yawFromPos(3.6,4.8)},//
+                                                 {3,5.4, 0, yawFromPos(3.0,5.4)},//
+                                     centeringTag(DESIRED_HEIGHT);              {2.4, 6, 0,yawFromPos(2.4, 6)},//
+                                                 {1.8, 6.6, 0,yawFromPos(1.8,6.6)},//
+                                                 {1.2, 7.2, 0,yawFromPos(1.2,7.2)},//
+                                                 {0.6, 7.8, 0,yawFromPos(0.6,7.8)},//
+                                                 {0, 8.4, 0,yawFromPos(0,8.4)},//
+                                                 {-0.6, 7.8, 0,yawFromPos(-0.6,7.8)},//
+                                                 {-1.2, 7.2, 0,yawFromPos(-1.2,7.2)},//
+                                                 {-1.8, 6.6, 0,yawFromPos(-1.8,6.6)},//
+                                                 {-2.4, 6, 0,yawFromPos(-2.4, 6)},//
+                                                 {-3,5.4, 0, yawFromPos(-3.0,5.4)},//
+                                                 {-3.6,4.8, 0,yawFromPos(-3.6,4.8)},//
+                                                 {-4.2,4.2, 0, yawFromPos(-4.2,4.2)},//
+                                                 {-3.6, 3.6, 0, yawFromPos(-3.6,3.6)},//
+                                                 {-3.0, 3.0, 0,yawFromPos(-3.0,3.0)},//
+                                                 {-2.4, 2.4, 0,yawFromPos(-2.4,2.4)},//
+                                                 {-1.8, 1.8,0, yawFromPos(-1.8,1.8)},
+                                                 {-1.2, 1.2,0, yawFromPos(-1.2,1.2)},
+                                                 {-0.6,0.6, 0, yawFromPos(-0.6,0.6)},
+                                                 {0,0, 0, yawFromPos(0,0)},
   };//
+*/
 //                                                 {-1.5, 1.5, 0, 0},//
 //                                                 {-1.5, 0, 0, 0},//
 //                                                 {-2.5, 0, 0, 0},
@@ -741,20 +793,21 @@ bool PRGPARDrone::searchForTargetTag()
     i++;
   }
   ros::spinOnce();
-  while (home) ///sy wait till drone is outside of home
+  while (home || !detected_flag ) ///sy wait till drone is outside of home
   {
-
+    if(currentPos_x < -0.6 && currentPos_y < -0.6)
+      break;
     //ROS_INFO("Drone is at home");
     ros::spinOnce();
-    usleep(10000);
-  }
-  while (!detected_flag && !home) ///sy wait till tag is detected or come back to home
-  {
-    //ROS_INFO("Drone is outside home searching");
-    ros::spinOnce();
-    usleep(10000);
-  }
-
+    usleep(1000);
+  }  centeringTag(DESIRED_HEIGHT);
+//  while (!detected_flag && !home) ///sy wait till tag is detected or come back to home
+//  {
+//    //ROS_INFO("Drone is outside home searching");
+//    ros::spinOnce();
+//    usleep(1000);
+//  }
+  ROS_INFO("det = %d home = %d",detected_flag,home);
   if (detected_flag && !home)
   {
     ROS_INFO("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
@@ -762,10 +815,10 @@ bool PRGPARDrone::searchForTargetTag()
     double tag_y = currentPos_y;
     stopCmdAndHover();
     moveToPose(tag_x, tag_y, 0, 0);
-    ndPause.sleep(); //TODO
-    ndPause.sleep();
-    ndPause.sleep();
-    ros::spinOnce();
+    while(cmd_completed_flag == false)
+    {
+      ros::spinOnce();
+    }
 
     if (centeringTag(DESIRED_HEIGHT))
     {
@@ -826,8 +879,9 @@ bool PRGPARDrone::centeringTag(double current_height)
         moveBy(x_move, y_move, 0.0, angle_to_turn);
         ndPause.sleep();
         ndPause.sleep();
-        ndPause.sleep(); //TODO are these waits all necessary?
+        ndPause.sleep();
         ros::spinOnce();
+        return true;
       }
     }
     else
@@ -841,23 +895,12 @@ bool PRGPARDrone::centeringTag(double current_height)
     ROS_INFO("Small range search unsuccessful. Unable to centre.");
     return false;
   }
-
-  if (detected_flag == true)
-  {
-    ROS_INFO("Drone centred above Tag");
-    return true;
-  }
-  else
-  {
-    ROS_INFO("TAG lost during centring.");
-    return false;
-  }
 }
 
 /** Send commands to fly home.
  *
  */
-void PRGPARDrone::flightToHome() //TODO
+void PRGPARDrone::flightToHome()
 {
   ROS_INFO("Returning to home");
   ros::spinOnce();
@@ -874,37 +917,25 @@ void PRGPARDrone::flightToHome() //TODO
 //  moveToPose(0, 0, 0, 0);
 //  centeringTag(DESIRED_HEIGHT);
 //actual function***********************************
-  if(currentPos_y > currentPos_x)
-  {
-    moveToPose(0,3.2,0,0);
-  }
-  else
-  {
-    moveToPose(3.2,0,0,0);
-  }
+
+
+  moveToPose(3,3,0,0);
+  moveToPose(3.2,0,0,0);
+  moveToPose(1.5,0,0,0);
   moveToPose(0,0,0,0);
-  centeringTag(DESIRED_HEIGHT);
+  sendFlightCmd("c land");
+
 }
 
 double PRGPARDrone::yawFromPos(double x_coord,double y_coord)
 {
   double desired_yaw;
-  double focusPoint = 2.4;
-  //note y_coord will be negative but need +ve length for the formula. Hence focusPoint - y_coord
-  double a = sqrt((x_coord*x_coord + y_coord*y_coord));
-  double b = sqrt(x_coord*x_coord + (focusPoint-y_coord)*(focusPoint-y_coord));
-  double c = focusPoint;
+  double focusPoint = 9;
+
   //From cosine rule
-  desired_yaw = acos((a*a+b*b-c*c)/(2*a*b))*180/3.14;
-  if(y_coord>0)
-  {
-    desired_yaw = 180 - desired_yaw;
-  }
-  if(x_coord>0)
-  {
-    desired_yaw = desired_yaw * -1;
-  }
-  if(desired_yaw < 30 && desired_yaw > -30)
+  desired_yaw = -atan(x_coord/(focusPoint-y_coord))*180/3.14;
+
+  if(desired_yaw < 90 && desired_yaw > -90)
   {
     return desired_yaw;
   }
@@ -926,15 +957,15 @@ void PRGPARDrone::run()
   if (ros::ok())
   {
     //Rob removed for testing
-//    while (!start_flag)
-//    {
-//
-//      ros::spinOnce();
-//      usleep(10000);
-//    }
-//    if (start_flag)
+    while (!start_flag)
+    {
+
+      ros::spinOnce();
+      usleep(10000);
+    }
+    if (start_flag)
     //Rob temp
-    if(1)
+    //if(1)
     {
       if (!initARDrone())
       {
@@ -942,7 +973,7 @@ void PRGPARDrone::run()
         sendFlightCmd("c land");
         return;
       }
-
+      //target_tag = 1;
       //while(1);
       if(target_tag == 1)
       {
@@ -954,27 +985,29 @@ void PRGPARDrone::run()
         sendFlightCmd("c land");
         return;
       }
-      while(1);
+      moveBy(0,0,0.6,0);
+      while(cmd_completed_flag == false)
+      {
+        ros::spinOnce();
+      }
       toggleCam();
       ndPause.sleep();
       //    ros::spinOnce(); //
       picture_flag = true;
-      //if (picture_flag)
-      //{
-      ROS_INFO("picture flag changed");
-      ros::spinOnce();
-     // }
-      ndPause.sleep();
-      toggleCam();//TODO make sure picture is good/successful
-
+      while (picture_flag)
+      {
+        ROS_INFO("picture flag changed");
+        ros::spinOnce();
+      }
+      toggleCam();
       sendCmdToPiswarm(); ///sy piswarm back
       sendCmdToPiswarm(); ///sy piswarm back
       if(target_tag == 1)
-        {
-          setTargetTag();
-        }
-      flightToHome(); ///sy TODO make sure method returns only when it's home
-      land(); ///sy TODO "c land"?
+      {
+        setTargetTag();
+      }
+      flightToHome();
+      sendFlightCmd("c land");
     }
   }
 }
