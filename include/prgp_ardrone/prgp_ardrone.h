@@ -74,9 +74,9 @@
 #include <algorithm>
 #include <pthread.h>
 
-#define DESIRED_HEIGHT 0.8
+#define DESIRED_HEIGHT 0.6
 //Rob temp
-#define EXTRA_HEIGHT 0.4
+#define EXTRA_HEIGHT 0.9
 /** The main class for the prgp_ardrone package.
  */
 class PRGPARDrone
