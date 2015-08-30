@@ -75,7 +75,6 @@
 #include <pthread.h>
 
 #define DESIRED_HEIGHT 0.6
-//Rob temp
 #define EXTRA_HEIGHT 0.9
 /** The main class for the prgp_ardrone package.
  */
@@ -98,8 +97,6 @@ private:
   ros::Subscriber tagSub; /**< Subscriber to get the navdata, especially the tag result by /ardrone/navdata */
   ros::Subscriber currentStateSub; /**< Subscriber to get the current state of the AR.Drone */
   ros::Subscriber imgSub; /**< Subscriber to get the image from camera by /ardrone/image_raw */
-  ros::Subscriber image_cmd_sub; ///
-  ros::Publisher image_cmd_pub; ///
   ros::Subscriber cmd_completed_sub;
 
   //Rob#
@@ -109,13 +106,6 @@ private:
   ros::ServiceClient toggleCamSrv; /**< Service client to send empty service to toggle the camera */
   ros::ServiceClient detecttypeSrv; /**< Service client to send empty service to change the detection configuration */
   ros::ServiceClient stopCmdAndHoverSrv; /**< Service client to send empty service to stop the current flight command and then hovering */
-
-  //messages
-  //std_msgs::String s; /**< Message for sending flight command to AR.Drone by /tum_ardrone/com*/
-  //std::string c;
-
-//  std_msgs::String s_Pi; /**< Message for sending command to Pi-Swarm by piswarm_com*/
-//  std::string c_Pi;
 
   std_srvs::Empty toggle_srvs; /**< Service from client to server to toggle the camera */
   std_srvs::Empty detect_srvs; /**< Service from client to server to change the detection configuration */
@@ -130,8 +120,8 @@ private:
   double currentPos_y;
   double currentPos_z;
   bool start_flag; /**< The value will be true when AR.Drone get the recruiting command from Pi-Swarm */
-  bool initialising_PTAM_flag; //Rob# /**The value will be true whilst drone is taking off and performing initial movements to configure PTAM and locate home tag */
-  bool aligning_to_home_tag; //Rob# /**The value will be true until the drone has centered above home tag and set new reference */
+  bool initialising_PTAM_flag; /**The value will be true whilst drone is taking off and performing initial movements to configure PTAM and locate home tag */
+  bool aligning_to_home_tag; /**The value will be true until the drone has centered above home tag and set new reference */
   bool detected_flag; /**< The value will be true when AR.Drone detect the target tag during the flight */
   bool detected_flag_h; /**< The value will be true when AR.Drone detect the target tag from the front camera */
   bool centering_flag; /**< The value will be true before AR.Drone centering the tag */
@@ -141,7 +131,7 @@ private:
   bool init_detected_flag; /**< The value will be true when tag detected at the initial stage */
   bool home_tag_det; /**< The value will be true to activate the tag detection at the home stage of AR.Drone */
   bool home_detected_flag; /**< The value will be true when tag detected at home stage */
-  bool executing_command_flag; //Rob# /**< this value will be true whilst the drone is executing a tum command, it will be set to false after a callback */
+  bool executing_command_flag; /**< this value will be true whilst the drone is executing a tum command, it will be set to false after a callback */
   bool cmd_completed_flag;
   bool home;
   bool image_saved;
@@ -152,7 +142,7 @@ private:
   uint16_t current_tag; /**< change when setTargetTag() is used, 0 for black_roundel, 1 for COCARDE */
   uint16_t target_tag; /**< 0 for black_roundel, 1 for COCARDE, 2 for mixed tag type (current_tag is 0) */
   bool reference_set;
-  //Rob# **liu, Initialise the private variable here will be show warning.
+
   float altitude;
   uint32_t tag_x_coord;
   uint32_t tag_y_coord;
